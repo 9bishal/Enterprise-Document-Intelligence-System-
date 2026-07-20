@@ -1,0 +1,119 @@
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+dist/
+.cache/
+
+# Build artifacts
+*.o
+*.a
+*.so
+.dylib
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+data/app.db
+data/chroma.sqlite3
+
+# Uploads
+uploads/
+temp/
+tmp/
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+.AppleDouble
+.LSOverride
+
+# Test coverage
+.coverage
+.pytest_cache/
+htmlcov/
+
+# Chroma data
+data/chroma/
+**/data/chroma/
+
+# Development
+.vscode/launch.json
+.env.development
+.env.production
+
+# Frontend
+frontend/dist/
+frontend/build/
+frontend/.env
+
+# Docker
+docker-compose.override.yml
+
+# Misc
+.cache
+.vscode-test
+.vscode/
+
+# Sensitive files
+secrets.json
+config.json
+*.pem
+*.key
+.ssh/
+
+# Production
+.next/
+out/
