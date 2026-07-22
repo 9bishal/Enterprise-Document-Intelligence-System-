@@ -24,18 +24,18 @@ Full-stack engineer specializing in **RAG systems, LLM integration, and intellig
 
 ## 💼 PROJECTS
 
-### 1. **DOCUMENT INTELLIGENCE SYSTEM** | Django REST, React/Vite, Groq LLM, Chroma Vector DB, RAG Pipeline
+### 1. **DOCUMENT INTELLIGENCE SYSTEM** | Django REST, React/Vite, Groq/Gemini/OpenAI, Chroma, Redis, RAG Pipeline
 **Full-stack production-grade system enabling intelligent document querying with real-time execution visualization**
 
-- **Architected end-to-end RAG pipeline** combining semantic retrieval and agentic reasoning; engineered dual-LLM routing (Groq for fast inference, embedding models for retrieval) achieving **sub-200ms query latency** and **40% improved context relevance**
-- **Designed scalable backend infrastructure** with Django REST Framework: 40+ RESTful endpoints, Pydantic validation, JWT authentication with secure token refresh cycles, and granular role-based access control (Admin/User/Viewer) enforcing **department-isolated document access**
-- **Built React/Vite frontend** with real-time chat UI, live execution graph visualization, and thread persistence; implemented efficient state management using context-based reducers to handle multi-user sessions and dynamic chat CRUD operations
-- **Debugged and resolved critical integration issues:** fixed CORS credential handling across dev/prod environments via custom Django middleware, resolved JWT token persistence bugs through httpOnly cookie implementation, and optimized vector indexing (512-token chunks with overlap) for semantic accuracy
-- **Engineered document processing pipeline** with PDF extraction, intelligent chunking, and dual-model embeddings; supports role-based querying ensuring users access only department-scoped documents
+- **Architected end-to-end RAG pipeline** with hybrid retrieval (dense + BM25 via RRF), semantic caching (RBAC-aware), multi-provider LLM fallback, web search fallback, and response evaluation (heuristic + LLM judge)
+- **Built multi-layer caching system** (semantic, embedding, domain) with Redis backend, reducing LLM calls by reusing responses for similar queries; integrated Prometheus metrics and Langfuse tracing for observability
+- **Designed cost tracking infrastructure**: token counting, per-model pricing, estimated cost per query stored with ChatMessage; admin dashboard displays usage analytics
+- **Implemented API key encryption** (Fernet at rest) and batch document upload (up to 1000 files via RQ/ThreadPool job queue); health check endpoints for k8s readiness/liveness probes
+- **Built React/Vite frontend** with SVG icon library (replacing emojis), landing page, toast notifications, error boundary, and cost/metrics display in RAG visualizer
 - **Delivered comprehensive documentation** (HLD, LLD, deployment guides, CONTRIBUTING.md) and production-ready error handling for enterprise adoption
 
-**Stack:** Python, Django, React, TypeScript, Groq API, Chroma, SQLite, Docker  
-**Key Metrics:** 5 micromodules, 40+ endpoints, <200ms latency, role-based security, <80ms avg response time
+**Stack:** Python, Django, React, Groq/Gemini/OpenAI, Chroma, Redis, RQ, Prometheus, SQLite, Docker  
+**Key Metrics:** 6 micromodules, 45+ endpoints, hybrid search, semantic caching, cost tracking, role-based security
 
 ---
 
@@ -84,4 +84,4 @@ I'm ready to bring this same energy to challenging engineering problems where de
 
 ---
 
-*Last Updated: May 27, 2026*
+*Last Updated: July 22, 2026*

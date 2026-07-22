@@ -22,6 +22,7 @@ from django.views.decorators.csrf import csrf_exempt
 
 # Import views
 from django_backend import views
+from django_backend.monitoring import health as health_views
 
 # Root home landing view
 def home_view(request):
@@ -123,6 +124,7 @@ urlpatterns = [
     # Document Endpoints
     path("api/documents", views.get_documents_list),
     path("api/documents/upload", views.upload_document),
+    path("api/documents/upload/batch", views.upload_documents_batch),
     path("api/documents/<str:doc_id>", views.delete_document),
     
     # Session Endpoints
@@ -143,6 +145,11 @@ urlpatterns = [
     path("api/admin/knowledge-graph", views.admin_knowledge_graph_data),
     path("api/admin/documents/<str:doc_id>/delete", views.admin_delete_document),
     
+    # Health & Monitoring Endpoints
+    path("api/health/live", health_views.health_live),
+    path("api/health/ready", health_views.health_ready),
+    path("api/cache/stats", health_views.cache_stats),
+
     # Global LLM Settings Endpoints
     path("api/llm-config", views.get_public_llm_config),
     path("api/admin/llm-config", views.get_admin_llm_config),

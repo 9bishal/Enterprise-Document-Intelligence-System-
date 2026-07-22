@@ -44,7 +44,7 @@ class ChatMessageSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ChatMessage
-        fields = ('id', 'session_id', 'role', 'content', 'sources', 'steps', 'created_at')
+        fields = ('id', 'session_id', 'role', 'content', 'sources', 'steps', 'model_used', 'input_tokens', 'output_tokens', 'estimated_cost_usd', 'latency_ms', 'cache_hit', 'created_at')
         read_only_fields = ('id', 'created_at')
 
     def get_sources(self, obj):

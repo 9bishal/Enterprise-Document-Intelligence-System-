@@ -22,6 +22,14 @@ from app.database import (
 from app.vector_store import index_document, delete_document_from_index
 from app.rag_graph import run_rag_pipeline
 
+# Prometheus metrics endpoint
+try:
+    from prometheus_client import make_wsgi_app
+    from werkzeug.middleware.dispatcher import DispatcherMiddleware
+    _prometheus_available = True
+except Exception:
+    _prometheus_available = False
+
 app = FastAPI(
     title="Intradoc AI API", description="FastAPI Backend for LangGraph RAG application"
 )
@@ -46,6 +54,11 @@ UPLOADS_DIR = os.path.join(
 )
 os.makedirs(UPLOADS_DIR, exist_ok=True)
 
+
+# Mount Prometheus metrics endpoint
+if _prometheus_available:
+    from werkzeug.middleware.dispatcher import DispatcherMiddleware
+    app.mount("/metrics", make_wsgi_app())
 
 # Initialize database on startup
 @app.on_event("startup")

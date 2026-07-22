@@ -66,15 +66,68 @@ class PasswordResetOTP(models.Model):
     def __str__(self):
         return f"Reset OTP for {self.email}"
 
+def _mask_key(key):
+    if not key or len(key) < 8:
+        return ""
+    return key[:4] + "*" * (len(key) - 8) + key[-4:]
+
+def _encrypt_value(plaintext):
+    if not plaintext:
+        return ""
+    from django.conf import settings
+    from cryptography.fernet import Fernet
+    import base64, hashlib
+    key = base64.urlsafe_b64encode(hashlib.sha256(settings.SECRET_KEY.encode()).digest())
+    f = Fernet(key)
+    return f.encrypt(plaintext.encode()).decode()
+
+def _decrypt_value(ciphertext):
+    if not ciphertext:
+        return ""
+    from django.conf import settings
+    from cryptography.fernet import Fernet
+    import base64, hashlib
+    key = base64.urlsafe_b64encode(hashlib.sha256(settings.SECRET_KEY.encode()).digest())
+    f = Fernet(key)
+    try:
+        return f.decrypt(ciphertext.encode()).decode()
+    except Exception:
+        return ciphertext
+
 class LLMConfig(models.Model):
     enforce_globally = models.BooleanField(default=False)
     provider = models.CharField(max_length=50, default='gemini')
     model = models.CharField(max_length=100, default='gemini-1.5-flash')
     temperature = models.FloatField(default=0.3)
     k = models.IntegerField(default=4)
-    groq_api_key = models.CharField(max_length=255, blank=True)
-    gemini_api_key = models.CharField(max_length=255, blank=True)
-    openai_api_key = models.CharField(max_length=255, blank=True)
+    groq_api_key = models.CharField(max_length=512, blank=True)
+    gemini_api_key = models.CharField(max_length=512, blank=True)
+    openai_api_key = models.CharField(max_length=512, blank=True)
+
+    def get_groq_key(self):
+        return (_decrypt_value(self.groq_api_key) or "").strip()
+
+    def get_gemini_key(self):
+        return (_decrypt_value(self.gemini_api_key) or "").strip()
+
+    def get_openai_key(self):
+        return (_decrypt_value(self.openai_api_key) or "").strip()
+
+    def set_groq_key(self, value):
+        self.groq_api_key = _encrypt_value((value or "").strip())
+
+    def set_gemini_key(self, value):
+        self.gemini_api_key = _encrypt_value((value or "").strip())
+
+    def set_openai_key(self, value):
+        self.openai_api_key = _encrypt_value((value or "").strip())
+
+    def masked_keys(self):
+        return {
+            "groq": _mask_key(self.get_groq_key()),
+            "gemini": _mask_key(self.get_gemini_key()),
+            "openai": _mask_key(self.get_openai_key()),
+        }
 
     def __str__(self):
         return f"Global LLM Config (Enforced: {self.enforce_globally})"
@@ -96,6 +149,12 @@ class ChatMessage(models.Model):
     content = models.TextField()
     sources = models.TextField(null=True, blank=True) # JSON array of sources
     steps = models.TextField(null=True, blank=True) # JSON array of steps
+    model_used = models.CharField(max_length=100, null=True, blank=True)
+    input_tokens = models.IntegerField(default=0)
+    output_tokens = models.IntegerField(default=0)
+    estimated_cost_usd = models.FloatField(default=0.0)
+    latency_ms = models.IntegerField(default=0)
+    cache_hit = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

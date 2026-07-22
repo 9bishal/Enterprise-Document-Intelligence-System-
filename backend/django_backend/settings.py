@@ -129,6 +129,9 @@ STATIC_URL = "static/"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+# Redis Configuration (used by caching layer)
+REDIS_URL = os.getenv("INTRADOC_REDIS_URL", "redis://localhost:6379/0")
+
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
@@ -148,6 +151,25 @@ SIMPLE_JWT = {
     'USER_ID_FIELD': 'id',
     'USER_ID_CLAIM': 'user_id',
     'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
+}
+
+# Structured Logging
+import logging
+logging.basicConfig(
+    level=logging.DEBUG if DEBUG else logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+# Quiet noisy loggers
+for _lib in ("chromadb", "httpx", "urllib3", "sentence_transformers", "PIL"):
+    logging.getLogger(_lib).setLevel(logging.WARNING)
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {"structured": {"format": "%(asctime)s %(levelname)s %(name)s %(message)s", "datefmt": "%Y-%m-%d %H:%M:%S"}},
+    "handlers": {"console": {"class": "logging.StreamHandler", "formatter": "structured"}},
+    "root": {"handlers": ["console"], "level": logging.DEBUG if DEBUG else logging.INFO},
 }
 
 # Email (SMTP) Configuration

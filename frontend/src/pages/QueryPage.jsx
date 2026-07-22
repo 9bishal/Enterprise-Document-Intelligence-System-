@@ -1,6 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import ChatWindow from '../components/ChatWindow';
 import Visualizer from '../components/Visualizer';
+import { GlobeIcon, UsersIcon, DollarIcon, WrenchIcon, FileIcon, UserIcon, EditIcon, TrashIcon, PlusIcon, ChatIcon, FolderIcon, CheckCircleIcon, XCircleIcon } from '../components/Icons';
+import { safeLocalStorage } from '../utils/constants';
+const storage = safeLocalStorage();
 
 export default function QueryPage({
   API_BASE,
@@ -29,7 +32,8 @@ export default function QueryPage({
   const [editingSessionId, setEditingSessionId] = useState(null);
   const [editingSessionName, setEditingSessionName] = useState('');
 
-  const token = localStorage.getItem('intradoc_token');
+  const lastAssistantMsg = useMemo(() => messages.filter(m => m.role === 'assistant').slice(-1)[0], [messages]);
+  const token = storage.getItem('intradoc_token');
 
   // --- Fetch sessions once mounted ---
   useEffect(() => {
@@ -192,7 +196,14 @@ export default function QueryPage({
           content: reply.content || 'Response received',
           created_at: new Date().toISOString(),
           steps: actualSteps,
-          sources: reply.sources || []
+          sources: reply.sources || [],
+          estimated_cost_usd: reply.estimated_cost_usd,
+          model_used: reply.model_used,
+          input_tokens: reply.input_tokens,
+          output_tokens: reply.output_tokens,
+          latency_ms: reply.latency_ms,
+          cache_hit: reply.cache_hit,
+          evaluation: reply.evaluation,
         };
 
         setMessages(prev => [...prev, assistantMsg]);
@@ -290,7 +301,7 @@ export default function QueryPage({
       <aside className="chat-sidebar">
         {/* Header with Logo */}
         <div className="sidebar-header">
-          <h2>💬 Intradoc Chat</h2>
+          <h2><ChatIcon style={{ width: 20, height: 20, verticalAlign: 'middle', marginRight: 8 }} /> Intradoc Chat</h2>
         </div>
 
         {/* New Chat Button */}
@@ -298,7 +309,7 @@ export default function QueryPage({
           className="new-chat-btn"
           onClick={handleCreateSession}
         >
-          ➕ New Chat
+<PlusIcon style={{ width: 14, height: 14, verticalAlign: 'middle', marginRight: 6 }} /> New Chat
         </button>
 
         {/* Department Filter */}
@@ -309,12 +320,12 @@ export default function QueryPage({
             onChange={(e) => setAdminActiveDepartment(e.target.value)}
             className="dept-select"
           >
-            <option value="All Departments">🌐 All Departments</option>
-            <option value="HR">👥 HR</option>
-            <option value="Legal">⚖️ Legal</option>
-            <option value="Finance">💰 Finance</option>
-            <option value="Technical">🔧 Technical</option>
-            <option value="General">📋 General</option>
+            <option value="All Departments"><GlobeIcon style={{ width: 12, height: 12, verticalAlign: 'middle', marginRight: 4 }} /> All Departments</option>
+            <option value="HR"><UsersIcon style={{ width: 12, height: 12, verticalAlign: 'middle', marginRight: 4 }} /> HR</option>
+            <option value="Legal"><FileIcon style={{ width: 12, height: 12, verticalAlign: 'middle', marginRight: 4 }} /> Legal</option>
+            <option value="Finance"><DollarIcon style={{ width: 12, height: 12, verticalAlign: 'middle', marginRight: 4 }} /> Finance</option>
+            <option value="Technical"><WrenchIcon style={{ width: 12, height: 12, verticalAlign: 'middle', marginRight: 4 }} /> Technical</option>
+            <option value="General"><FolderIcon style={{ width: 12, height: 12, verticalAlign: 'middle', marginRight: 4 }} /> General</option>
           </select>
           <p className="dept-help">
             Select which department's documents to query from
@@ -349,14 +360,14 @@ export default function QueryPage({
                         onClick={() => handleEditSessionSave(session.id)}
                         title="Save"
                       >
-                        ✓
+                        <CheckCircleIcon style={{ width: 14, height: 14 }} />
                       </button>
                       <button
                         className="edit-btn-cancel"
                         onClick={handleEditSessionCancel}
                         title="Cancel"
                       >
-                        ✕
+                        <XCircleIcon style={{ width: 14, height: 14 }} />
                       </button>
                     </div>
                   ) : (
@@ -400,7 +411,7 @@ export default function QueryPage({
                                 handleEditSessionStart(session.id, session.name);
                               }}
                             >
-                              ✏️ Rename
+<EditIcon style={{ width: 14, height: 14, verticalAlign: 'middle', marginRight: 6 }} /> Rename
                             </button>
                             <button
                               className="dropdown-item delete-item"
@@ -409,7 +420,7 @@ export default function QueryPage({
                                 handleDeleteSession(session.id);
                               }}
                             >
-                              🗑️ Delete
+<TrashIcon style={{ width: 14, height: 14, verticalAlign: 'middle', marginRight: 6 }} /> Delete
                             </button>
                           </div>
                         )}
@@ -424,7 +435,7 @@ export default function QueryPage({
 
         {/* Sidebar Footer */}
         <div className="sidebar-footer">
-          <p className="sidebar-user">👤 {currentUser}</p>
+          <p className="sidebar-user"><UserIcon style={{ width: 14, height: 14, verticalAlign: 'middle', marginRight: 6 }} /> {currentUser}</p>
           <p className="sidebar-dept">Dept: {userDepartment}</p>
         </div>
       </aside>
@@ -457,7 +468,7 @@ export default function QueryPage({
                 onClick={() => setShowVisualizer(false)}
                 title="Close Visualizer"
               >
-                ✕
+                <XCircleIcon style={{ width: 16, height: 16 }} />
               </button>
             </div>
             <Visualizer
@@ -466,6 +477,12 @@ export default function QueryPage({
               highlightedSourceId={highlightedSourceId}
               sources={messages.length > 0 && messages[messages.length - 1]?.role === 'assistant' ? messages[messages.length - 1]?.sources : []}
               onClearHighlight={() => setHighlightedSourceId(null)}
+              messageCost={lastAssistantMsg?.estimated_cost_usd}
+              messageModel={lastAssistantMsg?.model_used}
+              messageTokens={{input: lastAssistantMsg?.input_tokens, output: lastAssistantMsg?.output_tokens}}
+              messageLatency={lastAssistantMsg?.latency_ms}
+              messageCacheHit={lastAssistantMsg?.cache_hit}
+              messageEvaluation={lastAssistantMsg?.evaluation}
             />
           </div>
         )}
@@ -492,7 +509,7 @@ export default function QueryPage({
         .chat-sidebar {
           width: 280px;
           background: linear-gradient(135deg, #FFFFFF 0%, #F5F3ED 100%);
-          border-right: 1px solid rgba(20, 20, 19, 0.08);
+          border-right: 1px solid rgba(36, 50, 82, 0.08);
           display: flex;
           flex-direction: column;
           box-shadow: 2px 0 8px rgba(0, 0, 0, 0.02);
@@ -502,7 +519,7 @@ export default function QueryPage({
 
         .sidebar-header {
           padding: 20px 16px;
-          border-bottom: 1px solid rgba(20, 20, 19, 0.08);
+          border-bottom: 1px solid rgba(36, 50, 82, 0.08);
         }
 
         .sidebar-header h2 {
@@ -540,31 +557,31 @@ export default function QueryPage({
 
         .department-section {
           padding: 16px;
-          border-bottom: 1px solid rgba(20, 20, 19, 0.08);
+          border-bottom: 1px solid rgba(36, 50, 82, 0.08);
         }
 
         .dept-label {
           display: block;
           font-size: 12px;
           font-weight: 600;
-          color: #141413;
+          color: #1a1c20;
           margin-bottom: 8px;
         }
 
         .dept-select {
           width: 100%;
           padding: 10px 12px;
-          border: 1px solid rgba(20, 20, 19, 0.15);
+          border: 1px solid rgba(36, 50, 82, 0.15);
           border-radius: 6px;
           font-size: 13px;
-          color: #141413;
+          color: #1a1c20;
           background: white;
           cursor: pointer;
           transition: all 0.2s;
         }
 
         .dept-select:hover {
-          border-color: rgba(20, 20, 19, 0.25);
+          border-color: rgba(36, 50, 82, 0.25);
         }
 
         .dept-select:focus {
@@ -575,7 +592,7 @@ export default function QueryPage({
 
         .dept-help {
           font-size: 11px;
-          color: #8E8B82;
+          color: #8b92a0;
           margin: 8px 0 0 0;
         }
 
@@ -591,7 +608,7 @@ export default function QueryPage({
           margin: 12px 16px 8px 16px;
           font-size: 12px;
           font-weight: 700;
-          color: #141413;
+          color: #1a1c20;
           text-transform: uppercase;
           letter-spacing: 0.5px;
         }
@@ -612,26 +629,26 @@ export default function QueryPage({
         }
 
         .chat-history-list::-webkit-scrollbar-thumb {
-          background: rgba(20, 20, 19, 0.15);
+          background: rgba(36, 50, 82, 0.15);
           border-radius: 3px;
         }
 
         .chat-history-list::-webkit-scrollbar-thumb:hover {
-          background: rgba(20, 20, 19, 0.25);
+          background: rgba(36, 50, 82, 0.25);
         }
 
         .empty-history {
           padding: 24px 12px;
           text-align: center;
-          color: #8E8B82;
+          color: #8b92a0;
           font-size: 12px;
         }
 
         .chat-history-item {
           padding: 10px 12px;
           margin-bottom: 6px;
-          background: rgba(20, 20, 19, 0.04);
-          border: 1px solid rgba(20, 20, 19, 0.08);
+          background: rgba(36, 50, 82, 0.04);
+          border: 1px solid rgba(36, 50, 82, 0.08);
           border-radius: 6px;
           cursor: pointer;
           transition: all 0.2s;
@@ -642,8 +659,8 @@ export default function QueryPage({
         }
 
         .chat-history-item:hover {
-          background: rgba(20, 20, 19, 0.08);
-          border-color: rgba(20, 20, 19, 0.15);
+          background: rgba(36, 50, 82, 0.08);
+          border-color: rgba(36, 50, 82, 0.15);
         }
 
         .chat-history-item.active {
@@ -662,7 +679,7 @@ export default function QueryPage({
         .history-item-name {
           font-size: 12px;
           font-weight: 600;
-          color: #141413;
+          color: #1a1c20;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
@@ -670,7 +687,7 @@ export default function QueryPage({
 
         .history-item-time {
           font-size: 10px;
-          color: #8E8B82;
+          color: #8b92a0;
         }
 
         .history-item-menu-container {
@@ -683,7 +700,7 @@ export default function QueryPage({
           cursor: pointer;
           font-size: 16px;
           padding: 2px 6px;
-          color: #8E8B82;
+          color: #8b92a0;
           transition: all 0.2s;
           opacity: 0;
           display: flex;
@@ -696,7 +713,7 @@ export default function QueryPage({
         }
 
         .history-item-menu-btn:hover {
-          color: #141413;
+          color: #1a1c20;
           transform: scale(1.2);
         }
 
@@ -706,7 +723,7 @@ export default function QueryPage({
           top: 100%;
           margin-top: 4px;
           background: white;
-          border: 1px solid rgba(20, 20, 19, 0.15);
+          border: 1px solid rgba(36, 50, 82, 0.15);
           border-radius: 6px;
           box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
           z-index: 1000;
@@ -725,15 +742,15 @@ export default function QueryPage({
           font-weight: 600;
           cursor: pointer;
           transition: all 0.2s;
-          color: #141413;
+          color: #1a1c20;
         }
 
         .dropdown-item:first-child {
-          border-bottom: 1px solid rgba(20, 20, 19, 0.08);
+          border-bottom: 1px solid rgba(36, 50, 82, 0.08);
         }
 
         .dropdown-item:hover {
-          background: rgba(20, 20, 19, 0.04);
+          background: rgba(36, 50, 82, 0.04);
         }
 
         .dropdown-item.delete-item:hover {
@@ -754,7 +771,7 @@ export default function QueryPage({
           border: 1px solid #30A46C;
           border-radius: 4px;
           font-size: 12px;
-          color: #141413;
+          color: #1a1c20;
           font-weight: 600;
         }
 
@@ -793,14 +810,14 @@ export default function QueryPage({
 
         .sidebar-footer {
           padding: 16px;
-          border-top: 1px solid rgba(20, 20, 19, 0.08);
-          background: rgba(20, 20, 19, 0.02);
+          border-top: 1px solid rgba(36, 50, 82, 0.08);
+          background: rgba(36, 50, 82, 0.02);
         }
 
         .documents-section {
           padding: 12px 8px;
-          border-top: 1px solid rgba(20, 20, 19, 0.08);
-          border-bottom: 1px solid rgba(20, 20, 19, 0.08);
+          border-top: 1px solid rgba(36, 50, 82, 0.08);
+          border-bottom: 1px solid rgba(36, 50, 82, 0.08);
         }
 
         .documents-header {
@@ -815,7 +832,7 @@ export default function QueryPage({
           margin: 0;
           font-size: 12px;
           font-weight: 700;
-          color: #141413;
+          color: #1a1c20;
           text-transform: uppercase;
           letter-spacing: 0.5px;
         }
@@ -825,13 +842,13 @@ export default function QueryPage({
           border: none;
           cursor: pointer;
           font-size: 10px;
-          color: #8E8B82;
+          color: #8b92a0;
           padding: 2px 4px;
           transition: all 0.2s;
         }
 
         .documents-toggle-btn:hover {
-          color: #141413;
+          color: #1a1c20;
         }
 
         .documents-list {
@@ -849,18 +866,18 @@ export default function QueryPage({
         }
 
         .documents-list::-webkit-scrollbar-thumb {
-          background: rgba(20, 20, 19, 0.15);
+          background: rgba(36, 50, 82, 0.15);
           border-radius: 2px;
         }
 
         .documents-list::-webkit-scrollbar-thumb:hover {
-          background: rgba(20, 20, 19, 0.25);
+          background: rgba(36, 50, 82, 0.25);
         }
 
         .empty-docs {
           padding: 12px;
           text-align: center;
-          color: #8E8B82;
+          color: #8b92a0;
           font-size: 11px;
           margin: 0;
         }
@@ -868,8 +885,8 @@ export default function QueryPage({
         .document-item {
           padding: 8px 10px;
           margin-bottom: 4px;
-          background: rgba(20, 20, 19, 0.04);
-          border: 1px solid rgba(20, 20, 19, 0.08);
+          background: rgba(36, 50, 82, 0.04);
+          border: 1px solid rgba(36, 50, 82, 0.08);
           border-radius: 4px;
           display: flex;
           flex-direction: column;
@@ -878,8 +895,8 @@ export default function QueryPage({
         }
 
         .document-item:hover {
-          background: rgba(20, 20, 19, 0.08);
-          border-color: rgba(20, 20, 19, 0.15);
+          background: rgba(36, 50, 82, 0.08);
+          border-color: rgba(36, 50, 82, 0.15);
         }
 
         .doc-info {
@@ -892,7 +909,7 @@ export default function QueryPage({
         .doc-name {
           font-size: 11px;
           font-weight: 600;
-          color: #141413;
+          color: #1a1c20;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
@@ -900,7 +917,7 @@ export default function QueryPage({
 
         .doc-size {
           font-size: 10px;
-          color: #8E8B82;
+          color: #8b92a0;
         }
 
         .doc-meta {
@@ -957,7 +974,7 @@ export default function QueryPage({
         .sidebar-dept {
           margin: 4px 0;
           font-size: 11px;
-          color: #8E8B82;
+          color: #8b92a0;
           font-weight: 500;
         }
 
@@ -975,7 +992,7 @@ export default function QueryPage({
           flex-direction: column;
           background: white;
           border-radius: 12px;
-          border: 1px solid rgba(20, 20, 19, 0.08);
+          border: 1px solid rgba(36, 50, 82, 0.08);
           box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
           overflow: hidden;
         }
@@ -986,7 +1003,7 @@ export default function QueryPage({
           flex-direction: column;
           background: white;
           border-radius: 12px;
-          border: 1px solid rgba(20, 20, 19, 0.08);
+          border: 1px solid rgba(36, 50, 82, 0.08);
           box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
           overflow: hidden;
         }
@@ -996,14 +1013,14 @@ export default function QueryPage({
           align-items: center;
           justify-content: space-between;
           padding: 16px;
-          border-bottom: 1px solid rgba(20, 20, 19, 0.08);
+          border-bottom: 1px solid rgba(36, 50, 82, 0.08);
         }
 
         .visualizer-header h3 {
           margin: 0;
           font-size: 14px;
           font-weight: 600;
-          color: #141413;
+          color: #1a1c20;
         }
 
         .close-btn {
@@ -1011,13 +1028,13 @@ export default function QueryPage({
           border: none;
           font-size: 18px;
           cursor: pointer;
-          color: #8E8B82;
+          color: #8b92a0;
           transition: all 0.2s;
           padding: 4px 8px;
         }
 
         .close-btn:hover {
-          color: #141413;
+          color: #1a1c20;
         }
 
         .show-visualizer-btn {

@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { FileIcon, UploadIcon, TrashIcon } from '../components/Icons';
+import { FileIcon, UploadIcon, TrashIcon, FolderIcon, AlertTriangleIcon } from '../components/Icons';
+import { safeLocalStorage } from '../utils/constants';
+const storage = safeLocalStorage();
 
 export default function DocumentsPage({
   API_BASE,
@@ -14,7 +16,7 @@ export default function DocumentsPage({
   const [sortBy, setSortBy] = useState('recent'); // 'recent', 'name', 'size'
   const fileInputRef = useRef(null);
 
-  const token = localStorage.getItem('intradoc_token');
+  const token = storage.getItem('intradoc_token');
 
   // --- Fetch documents initially and when active department changes ---
   useEffect(() => {
@@ -293,12 +295,12 @@ export default function DocumentsPage({
                       )}
                       {doc.risk_status && doc.risk_status === 'Risk Detected' && (
                         <span className="tag risk">
-                          ⚠️ Risk Detected
+<AlertTriangleIcon style={{ width: 11, height: 11, verticalAlign: 'middle', marginRight: 3 }} /> Risk Detected
                         </span>
                       )}
                       {doc.department && (
                         <span className="tag department">
-                          📁 {doc.department}
+<FolderIcon style={{ width: 11, height: 11, verticalAlign: 'middle', marginRight: 3 }} /> {doc.department}
                         </span>
                       )}
                     </div>
@@ -342,13 +344,13 @@ export default function DocumentsPage({
           margin: 0;
           font-size: 28px;
           font-weight: 700;
-          color: #141413;
+          color: #1a1c20;
         }
 
         .subtitle {
           margin: 8px 0 0 0;
           font-size: 14px;
-          color: #8E8B82;
+          color: #8b92a0;
         }
 
         .stats-grid {
@@ -364,14 +366,14 @@ export default function DocumentsPage({
           justify-content: center;
           padding: 20px;
           background: white;
-          border: 1px solid rgba(20, 20, 19, 0.08);
+          border: 1px solid rgba(36, 50, 82, 0.08);
           border-radius: 12px;
           gap: 8px;
           transition: all 0.2s;
         }
 
         .stat-card:hover {
-          border-color: rgba(20, 20, 19, 0.15);
+          border-color: rgba(36, 50, 82, 0.15);
           box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
         }
 
@@ -392,7 +394,7 @@ export default function DocumentsPage({
 
         .stat-label {
           font-size: 12px;
-          color: #8E8B82;
+          color: #8b92a0;
           font-weight: 600;
           text-transform: uppercase;
         }
@@ -400,7 +402,7 @@ export default function DocumentsPage({
         .stat-value {
           font-size: 28px;
           font-weight: 700;
-          color: #141413;
+          color: #1a1c20;
         }
 
         .upload-section {
@@ -462,22 +464,22 @@ export default function DocumentsPage({
         .department-selector label {
           font-size: 13px;
           font-weight: 600;
-          color: #141413;
+          color: #1a1c20;
         }
 
         .department-selector select {
           padding: 8px 12px;
-          border: 1px solid rgba(20, 20, 19, 0.15);
+          border: 1px solid rgba(36, 50, 82, 0.15);
           border-radius: 6px;
           font-size: 13px;
-          color: #141413;
+          color: #1a1c20;
           background: white;
           cursor: pointer;
         }
 
         .upload-help {
           font-size: 12px;
-          color: #8E8B82;
+          color: #8b92a0;
           margin: 0;
         }
 
@@ -489,7 +491,7 @@ export default function DocumentsPage({
           background: white;
           padding: 16px;
           border-radius: 12px;
-          border: 1px solid rgba(20, 20, 19, 0.08);
+          border: 1px solid rgba(36, 50, 82, 0.08);
           flex-wrap: wrap;
         }
 
@@ -504,7 +506,7 @@ export default function DocumentsPage({
         .sort-group label {
           font-size: 13px;
           font-weight: 600;
-          color: #141413;
+          color: #1a1c20;
           white-space: nowrap;
         }
 
@@ -516,18 +518,18 @@ export default function DocumentsPage({
         .filter-btn {
           padding: 6px 12px;
           background: transparent;
-          border: 1px solid rgba(20, 20, 19, 0.15);
+          border: 1px solid rgba(36, 50, 82, 0.15);
           border-radius: 6px;
           font-size: 12px;
           font-weight: 600;
-          color: #8E8B82;
+          color: #8b92a0;
           cursor: pointer;
           transition: all 0.2s;
         }
 
         .filter-btn:hover {
-          border-color: rgba(20, 20, 19, 0.3);
-          color: #141413;
+          border-color: rgba(36, 50, 82, 0.3);
+          color: #1a1c20;
         }
 
         .filter-btn.active {
@@ -538,10 +540,10 @@ export default function DocumentsPage({
 
         .sort-group select {
           padding: 6px 10px;
-          border: 1px solid rgba(20, 20, 19, 0.15);
+          border: 1px solid rgba(36, 50, 82, 0.15);
           border-radius: 6px;
           font-size: 12px;
-          color: #141413;
+          color: #1a1c20;
           background: white;
           cursor: pointer;
         }
@@ -564,13 +566,13 @@ export default function DocumentsPage({
         .empty-state p {
           font-size: 16px;
           font-weight: 600;
-          color: #141413;
+          color: #1a1c20;
           margin: 0;
         }
 
         .empty-state span {
           font-size: 13px;
-          color: #8E8B82;
+          color: #8b92a0;
         }
 
         .documents-grid {
@@ -581,7 +583,7 @@ export default function DocumentsPage({
 
         .document-item {
           background: white;
-          border: 1px solid rgba(20, 20, 19, 0.08);
+          border: 1px solid rgba(36, 50, 82, 0.08);
           border-radius: 12px;
           padding: 16px;
           transition: all 0.2s;
@@ -591,7 +593,7 @@ export default function DocumentsPage({
         }
 
         .document-item:hover {
-          border-color: rgba(20, 20, 19, 0.15);
+          border-color: rgba(36, 50, 82, 0.15);
           box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
         }
 
@@ -641,7 +643,7 @@ export default function DocumentsPage({
           margin: 0;
           font-size: 14px;
           font-weight: 600;
-          color: #141413;
+          color: #1a1c20;
           word-break: break-word;
           white-space: normal;
           overflow: hidden;
@@ -654,7 +656,7 @@ export default function DocumentsPage({
         .doc-meta {
           margin: 0;
           font-size: 12px;
-          color: #8E8B82;
+          color: #8b92a0;
         }
 
         .doc-tags {
@@ -667,12 +669,12 @@ export default function DocumentsPage({
           display: inline-flex;
           align-items: center;
           padding: 4px 8px;
-          background: rgba(20, 20, 19, 0.05);
-          border: 1px solid rgba(20, 20, 19, 0.1);
+          background: rgba(36, 50, 82, 0.05);
+          border: 1px solid rgba(36, 50, 82, 0.1);
           border-radius: 4px;
           font-size: 11px;
           font-weight: 600;
-          color: #5C5A55;
+          color: #5b6472;
           white-space: nowrap;
         }
 
@@ -691,7 +693,7 @@ export default function DocumentsPage({
         .progress-bar {
           width: 100%;
           height: 4px;
-          background: rgba(20, 20, 19, 0.1);
+          background: rgba(36, 50, 82, 0.1);
           border-radius: 2px;
           overflow: hidden;
         }

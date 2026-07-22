@@ -1,6 +1,7 @@
 import os
 import uuid
-import threading
+import time
+from functools import partial
 
 # DRF Imports
 from rest_framework import status
@@ -18,6 +19,50 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fil
 UPLOADS_DIR = os.path.join(BASE_DIR, "uploads")
 os.makedirs(UPLOADS_DIR, exist_ok=True)
 
+_REDIS_URL = os.getenv("INTRADOC_REDIS_URL", "redis://localhost:6379/0")
+
+def _get_queue():
+    try:
+        import redis as _redis
+        from rq import Queue
+        _conn = _redis.from_url(_REDIS_URL)
+        _conn.ping()
+        return Queue("ingestion", connection=_conn, default_timeout=600)
+    except Exception:
+        return None
+
+def _schedule_indexing(doc_id, filename, filepath, department):
+    q = _get_queue()
+    if q is not None:
+        from rq import Retry
+        q.enqueue(process_document_indexing, doc_id, filename, filepath, department,
+                  retry=Retry(max=3, interval=[10, 30, 60]),
+                  job_timeout=600)
+    else:
+        from concurrent.futures import ThreadPoolExecutor
+        pool = ThreadPoolExecutor(max_workers=4)
+        pool.submit(process_document_indexing, doc_id, filename, filepath, department)
+
+def _save_uploaded_file(file, doc_id, filename):
+    filepath = os.path.join(UPLOADS_DIR, f"{doc_id}_{filename}")
+    with open(filepath, "wb") as destination:
+        for chunk in file.chunks():
+            destination.write(chunk)
+    return filepath
+
+def _get_user_context(request):
+    try:
+        return request.user.profile.department, request.user.profile.role
+    except Exception:
+        return 'General', 'Viewer'
+
+def _resolve_department(user_role, user_department, request):
+    if user_role == 'Admin':
+        requested_dept = request.data.get("department")
+        if requested_dept and requested_dept != "All Departments":
+            return requested_dept
+    return user_department
+
 @api_view(['POST'])
 @permission_classes([IsEditorOrAbove])
 def upload_document(request):
@@ -27,33 +72,17 @@ def upload_document(request):
     file = request.FILES['file']
     doc_id = str(uuid.uuid4())
     filename = file.name
-    filepath = os.path.join(UPLOADS_DIR, f"{doc_id}_{filename}")
-
-    # Get the user's department for scoping
-    try:
-        user_department = request.user.profile.department
-        user_role = request.user.profile.role
-    except Exception:
-        user_department = 'General'
-        user_role = 'Viewer'
-
-    # If admin provides a specific department, override user_department
-    if user_role == 'Admin':
-        requested_dept = request.data.get("department")
-        if requested_dept and requested_dept != "All Departments":
-            user_department = requested_dept
+    user_department, user_role = _get_user_context(request)
+    user_department = _resolve_department(user_role, user_department, request)
 
     try:
-        with open(filepath, "wb") as destination:
-            for chunk in file.chunks():
-                destination.write(chunk)
+        filepath = _save_uploaded_file(file, doc_id, filename)
     except Exception as e:
         return Response({"detail": f"Failed to save file: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     file_size = os.path.getsize(filepath)
 
-    # Save initial metadata to DB with department scoping
-    doc = Document.objects.create(
+    Document.objects.create(
         id=doc_id,
         user=request.user,
         filename=filename,
@@ -65,13 +94,7 @@ def upload_document(request):
         department=user_department
     )
 
-    # Spawn thread for background vector store indexing with department
-    thread = threading.Thread(
-        target=process_document_indexing,
-        args=(doc_id, filename, filepath, user_department)
-    )
-    thread.daemon = True
-    thread.start()
+    _schedule_indexing(doc_id, filename, filepath, user_department)
 
     return Response({
         "id": doc_id,
@@ -79,6 +102,52 @@ def upload_document(request):
         "status": "ingesting",
         "department": user_department,
         "message": f"File upload complete. Background parsing and vector indexing started for {user_department} department."
+    })
+
+@api_view(['POST'])
+@permission_classes([IsEditorOrAbove])
+def upload_documents_batch(request):
+    files = request.FILES.getlist("files")
+    if not files:
+        return Response({"detail": "No files uploaded. Send as form-data with key 'files' (multiple)."}, status=status.HTTP_400_BAD_REQUEST)
+
+    user_department, user_role = _get_user_context(request)
+    user_department = _resolve_department(user_role, user_department, request)
+
+    if len(files) > 1000:
+        return Response({"detail": "Batch size limited to 1000 files per request."}, status=status.HTTP_400_BAD_REQUEST)
+
+    results = []
+    errors = []
+    for file in files:
+        doc_id = str(uuid.uuid4())
+        filename = file.name
+        try:
+            filepath = _save_uploaded_file(file, doc_id, filename)
+            file_size = os.path.getsize(filepath)
+            Document.objects.create(
+                id=doc_id,
+                user=request.user,
+                filename=filename,
+                path=filepath,
+                file_size=file_size,
+                status="ingesting",
+                classification="General",
+                risk_status="Clean",
+                department=user_department
+            )
+            _schedule_indexing(doc_id, filename, filepath, user_department)
+            results.append({"id": doc_id, "filename": filename, "status": "ingesting"})
+        except Exception as e:
+            errors.append({"filename": filename, "error": str(e)})
+
+    return Response({
+        "dispatched": len(results),
+        "errors": len(errors),
+        "documents": results,
+        "error_details": errors,
+        "department": user_department,
+        "message": f"{len(results)} files queued for indexing (concurrency={_MAX_CONCURRENT_INDEXING})."
     })
 
 @api_view(['GET'])

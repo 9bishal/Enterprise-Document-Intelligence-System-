@@ -153,7 +153,6 @@ def upload_document(request):
         target=process_document_indexing,
         args=(doc_id, filename, filepath, user_department)
     )
-    thread.daemon = True
     thread.start()
 
     return Response({

@@ -1,3 +1,4 @@
+import os
 import uuid
 import json
 
@@ -11,6 +12,20 @@ from django_backend.models import Document, ChatSession, ChatMessage, LLMConfig
 from django_backend.permissions import IsViewerOrAbove
 from django_backend.serializers import ChatSessionSerializer, ChatMessageSerializer
 from app.rag_graph import run_rag_pipeline
+
+API_KEY_PREFIXES = {
+    "groq": "gsk_",
+    "gemini": "AIza",
+    "openai": "sk-",
+}
+
+def _valid_key(provider: str, key: str) -> bool:
+    if not key:
+        return False
+    prefix = API_KEY_PREFIXES.get(provider)
+    if prefix and key.startswith(prefix):
+        return True
+    return False
 
 @api_view(['GET', 'POST'])
 @permission_classes([IsViewerOrAbove])
@@ -114,22 +129,30 @@ def query_rag(request):
     llm_config = LLMConfig.objects.first()
     if llm_config and llm_config.enforce_globally:
         api_keys = {
-            "gemini": llm_config.gemini_api_key,
-            "openai": llm_config.openai_api_key,
-            "groq": llm_config.groq_api_key
+            "groq": llm_config.get_groq_key() if _valid_key("groq", llm_config.get_groq_key()) else "",
+            "gemini": llm_config.get_gemini_key() if _valid_key("gemini", llm_config.get_gemini_key()) else "",
+            "openai": llm_config.get_openai_key() if _valid_key("openai", llm_config.get_openai_key()) else "",
         }
+        p = llm_config.provider
         model_config = {
-            "provider": llm_config.provider,
+            "provider": p,
             "model": llm_config.model,
             "temperature": llm_config.temperature,
-            "k": llm_config.k
+            "k": llm_config.k,
+            "fallback_provider": "groq" if p != "groq" else "gemini",
+            "fallback_model": "llama-3.3-70b-versatile" if p != "groq" else "gemini-1.5-flash",
+            "max_context_tokens": 3000,
         }
     else:
+        p = config_payload.get("provider", "groq")
         model_config = {
-            "provider": config_payload.get("provider", "gemini"),
-            "model": config_payload.get("model", "gemini-1.5-flash"),
+            "provider": p,
+            "model": config_payload.get("model", "llama-3.3-70b-versatile" if p == "groq" else "gemini-1.5-flash"),
             "temperature": config_payload.get("temperature", 0.3),
-            "k": config_payload.get("k", 4)
+            "k": config_payload.get("k", 4),
+            "fallback_provider": "groq" if p != "groq" else "gemini",
+            "fallback_model": "llama-3.3-70b-versatile" if p != "groq" else "gemini-1.5-flash",
+            "max_context_tokens": 3000,
         }
 
     # 4. Execute the stateful LangGraph pipeline with department scoping
@@ -148,7 +171,13 @@ def query_rag(request):
         role="assistant",
         content=result["generation"],
         sources=json.dumps(result["documents"]),
-        steps=json.dumps(result["steps"])
+        steps=json.dumps(result["steps"]),
+        model_used=result.get("model_used", ""),
+        input_tokens=result.get("input_tokens", 0),
+        output_tokens=result.get("output_tokens", 0),
+        estimated_cost_usd=result.get("estimated_cost_usd", 0.0),
+        latency_ms=result.get("latency_ms", 0),
+        cache_hit=result.get("cache_hit", False),
     )
 
     return Response({
@@ -157,5 +186,12 @@ def query_rag(request):
         "content": result["generation"],
         "sources": result["documents"],
         "steps": result["steps"],
-        "success": result["success"]
+        "success": result["success"],
+        "cache_hit": result.get("cache_hit", False),
+        "model_used": result.get("model_used", ""),
+        "estimated_cost_usd": result.get("estimated_cost_usd", 0.0),
+        "latency_ms": result.get("latency_ms", 0),
+        "input_tokens": result.get("input_tokens", 0),
+        "output_tokens": result.get("output_tokens", 0),
+        "evaluation": result.get("evaluation"),
     })

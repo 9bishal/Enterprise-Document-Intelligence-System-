@@ -18,26 +18,55 @@ backend/
 ├── app/                      # Core RAG application
 │   ├── __init__.py
 │   ├── database.py           # Database initialization
-│   ├── llm_helper.py         # LLM API wrapper
-│   ├── rag_graph.py          # RAG pipeline orchestration
-│   ├── vector_store.py       # Vector store operations
-│   └── main.py               # Main application entry
+│   ├── llm_helper.py         # LLM API wrapper (multi-provider, fallback, cost tracking)
+│   ├── rag_graph.py          # RAG pipeline orchestration (hybrid, rerank, cache, eval)
+│   ├── vector_store.py       # Vector store operations (hybrid search, semantic chunking)
+│   ├── main.py               # Main application entry (route registration)
+│   ├── analytics.py          # Langfuse tracing integration
+│   ├── semantic_chunk.py     # Semantic document chunking
+│   ├── evaluation/           # Response evaluation
+│   │   ├── __init__.py
+│   │   └── evaluator.py      # Heuristic scores + LLM judge
+│   └── retrieval/            # Hybrid retrieval pipeline
+│       ├── __init__.py
+│       ├── hybrid.py         # Dense + BM25 fusion via RRF
+│       ├── bm25.py           # BM25 keyword search
+│       ├── reranker.py       # Relevance reranking & filtering
+│       └── context_builder.py # Token-budget-aware context assembly
 ├── django_backend/           # Django project config
-│   ├── settings.py           # Django settings
-│   ├── urls.py               # URL routing
+│   ├── settings.py           # Django settings (Redis, structured logging)
+│   ├── urls.py               # URL routing (health, cache, batch)
 │   ├── wsgi.py               # WSGI config
 │   ├── asgi.py               # ASGI config
-│   ├── models.py             # Django ORM models
-│   ├── serializers.py        # DRF serializers
+│   ├── models.py             # Django ORM models (encrypted keys, cost fields)
+│   ├── serializers.py        # DRF serializers (with cost/model fields)
 │   ├── permissions.py        # Custom permission classes
 │   ├── middleware.py         # Custom middleware
 │   ├── migrations/           # Database migrations
+│   ├── cache/                # Multi-layer caching
+│   │   ├── __init__.py
+│   │   ├── base.py           # Cache base class
+│   │   ├── config.py         # Cache configuration
+│   │   ├── semantic_cache.py # RBAC-aware semantic response cache
+│   │   ├── embedding_cache.py # Embedding cache
+│   │   ├── domain_caches.py  # Domain-specific caches
+│   │   ├── manager.py        # Cache manager
+│   │   └── metrics.py        # Cache metrics
+│   ├── cost_tracking/        # LLM cost tracking
+│   │   ├── __init__.py
+│   │   ├── pricing.py        # Provider model pricing tables
+│   │   └── tracker.py        # Usage & cost aggregation
+│   ├── monitoring/           # System monitoring
+│   │   ├── __init__.py
+│   │   ├── metrics.py        # Prometheus metrics
+│   │   └── health.py         # Health check endpoints
 │   └── views/                # API endpoints
 │       ├── __init__.py
 │       ├── auth.py           # Authentication endpoints
-│       ├── rag.py            # RAG/chat endpoints
+│       ├── rag.py            # RAG/chat endpoints (with fallback, cost tracking)
 │       ├── documents.py      # Document endpoints
-│       ├── doc_indexing.py   # Document indexing
+│       ├── doc_indexing.py   # Document indexing (RQ/ThreadPool)
+│       ├── doc_api.py        # Document CRUD (batch upload, pagination)
 │       ├── admin.py          # Admin endpoints
 │       └── admin_*.py        # Admin specialized endpoints
 ├── data/                     # Data storage
@@ -197,6 +226,14 @@ class ChatMessage(Model):
     # Processing metadata
     tokens_used = IntegerField(null=True)
     processing_time_ms = IntegerField(null=True)
+    
+    # Cost & model tracking (added v2.0)
+    model_used = CharField(max_length=100, null=True, blank=True)
+    input_tokens = IntegerField(null=True)
+    output_tokens = IntegerField(null=True)
+    estimated_cost_usd = FloatField(null=True)
+    latency_ms = FloatField(null=True)
+    cache_hit = BooleanField(default=False)
     
     # Relationships
     session = ForeignKey(ChatSession, on_delete=CASCADE, related_name='messages')
@@ -433,26 +470,47 @@ Response (200):
       "details": "Generated embedding with 1536 dimensions"
     },
     {
-      "name": "Vector Search",
+      "name": "Hybrid Search",
       "status": "completed",
-      "duration_ms": 200,
-      "details": "Found 5 relevant chunks from 2 documents"
+      "duration_ms": 320,
+      "details": "Dense + BM25 search via RRF, found 8 chunks"
     },
     {
-      "name": "Prompt Construction",
+      "name": "Reranking",
       "status": "completed",
-      "duration_ms": 50,
-      "details": "Built prompt with 3 context chunks"
+      "duration_ms": 45,
+      "details": "Reranked 8 chunks, filtered to 5 above threshold"
+    },
+    {
+      "name": "Context Assembly",
+      "status": "completed",
+      "duration_ms": 30,
+      "details": "Built context with 3 chunks (within 3000 token budget)"
     },
     {
       "name": "LLM Response",
       "status": "completed",
       "duration_ms": 2500,
-      "details": "Generated 450 tokens using GPT-4"
+      "details": "Generated 450 tokens using llama-3.3-70b-versatile"
+    },
+    {
+      "name": "Evaluation",
+      "status": "completed",
+      "duration_ms": 120,
+      "details": "Heuristic score: 0.85, LLM judge: 4/5"
     }
   ],
-  "tokens_used": 650,
-  "processing_time_ms": 2900
+  "model_used": "llama-3.3-70b-versatile",
+  "input_tokens": 450,
+  "output_tokens": 120,
+  "estimated_cost_usd": 0.00015,
+  "latency_ms": 1250,
+  "cache_hit": false,
+  "evaluation": {
+    "heuristic": 0.85,
+    "llm_judge": 4,
+    "is_grounded": true
+  }
 }
 
 Error (400):
@@ -540,7 +598,7 @@ Access Control: Admin only
 
 ## 🧠 RAG Pipeline Implementation
 
-### rag_graph.py
+### rag_graph.py (v2.0 - updated pipeline)
 
 ```python
 class RAGPipeline:
@@ -550,158 +608,89 @@ class RAGPipeline:
         self.vector_store = VectorStore()
         self.steps = []
     
-    def run(self, query: str, department: str) -> Dict:
+    def run(self, query: str, department: str, user=None) -> Dict:
         """
-        Execute RAG pipeline and return response with steps
-        
-        Args:
-            query: User question
-            department: Filter by department
+        Execute RAG pipeline with hybrid search, reranking, fallback, evaluation.
         
         Returns:
             {
                 'content': 'Generated response',
                 'sources': [...],
-                'steps': [...]
+                'steps': [...],
+                'model_used': '...',
+                'input_tokens': int,
+                'output_tokens': int,
+                'estimated_cost_usd': float,
+                'latency_ms': float,
+                'cache_hit': bool,
+                'evaluation': {...}
             }
         """
         self.steps = []
+        pipeline_start = time.time()
         
         # Step 1: Query Embedding
         step1 = self._embed_query(query)
         self.steps.append(step1)
         
-        # Step 2: Vector Search
-        step2 = self._search_vectors(step1['embedding'], department)
+        # Step 2: Hybrid Search (dense + BM25 via RRF)
+        step2 = self._hybrid_search(step1['embedding'], query, department)
         self.steps.append(step2)
         
-        # Step 3: Document Retrieval
-        step3 = self._retrieve_documents(step2['chunk_ids'])
+        # Step 3: Rerank results
+        step3 = self._rerank(step2['chunks'], query)
         self.steps.append(step3)
         
-        # Step 4: Prompt Construction
-        step4 = self._build_prompt(query, step3['context'])
-        self.steps.append(step4)
+        # Step 4: Check semantic cache
+        cache_result = self._check_cache(query, department, user)
+        if cache_result['hit']:
+            self.steps.append(cache_result['step'])
+            return {**cache_result['response'], 'pipeline_ms': int((time.time()-pipeline_start)*1000)}
         
-        # Step 5: LLM Response
-        step5 = self._call_llm(step4['prompt'])
+        # Step 5: Context Assembly
+        step5 = self._build_context(step3['chunks'], query)
         self.steps.append(step5)
         
+        # Step 6: LLM Generation (with fallback)
+        step6 = self._call_llm_with_fallback(step5['prompt'])
+        self.steps.append(step6)
+        
+        # Step 7: Evaluation
+        step7 = self._evaluate(query, step6['response'], step3['chunks'])
+        self.steps.append(step7)
+        
+        # Step 8: Cache the result
+        self._cache_response(query, department, user, step6, step3['sources'])
+        
         return {
-            'content': step5['response'],
+            'content': step6['response'],
             'sources': step3['sources'],
-            'steps': self.steps
+            'steps': self.steps,
+            'model_used': step6['model_used'],
+            'input_tokens': step6.get('input_tokens', 0),
+            'output_tokens': step6.get('output_tokens', 0),
+            'estimated_cost_usd': step6.get('cost_usd', 0),
+            'latency_ms': int((time.time()-pipeline_start)*1000),
+            'cache_hit': False,
+            'evaluation': step7
         }
     
-    def _embed_query(self, query: str) -> Dict:
-        """Generate query embedding"""
-        start = time.time()
-        embedding = self.llm.get_embedding(query)
-        duration = (time.time() - start) * 1000
-        
-        return {
-            'name': 'Query Embedding',
-            'status': 'completed',
-            'duration_ms': int(duration),
-            'details': f'Generated embedding with {len(embedding)} dimensions',
-            'embedding': embedding
-        }
-    
-    def _search_vectors(self, embedding: List, department: str) -> Dict:
-        """Search vector store"""
-        start = time.time()
-        results = self.vector_store.search(
-            embedding=embedding,
-            top_k=5,
-            department=department
-        )
-        duration = (time.time() - start) * 1000
-        
-        return {
-            'name': 'Vector Search',
-            'status': 'completed',
-            'duration_ms': int(duration),
-            'details': f'Found {len(results)} relevant chunks',
-            'chunk_ids': [r['id'] for r in results],
-            'similarities': [r['similarity'] for r in results]
-        }
-    
-    def _retrieve_documents(self, chunk_ids: List[str]) -> Dict:
-        """Retrieve full documents and chunks"""
-        start = time.time()
-        chunks = self.vector_store.get_chunks(chunk_ids)
-        documents = self._group_by_document(chunks)
-        duration = (time.time() - start) * 1000
-        
-        sources = [
-            {
-                'id': doc_id,
-                'title': doc['title'],
-                'page': chunks[0]['page_number'],
-                'relevance': 0.95
-            }
-            for doc_id, doc in documents.items()
-        ]
-        
-        return {
-            'name': 'Document Retrieval',
-            'status': 'completed',
-            'duration_ms': int(duration),
-            'details': f'Retrieved {len(documents)} documents',
-            'context': '\n\n'.join([c['text'] for c in chunks]),
-            'sources': sources
-        }
-    
-    def _build_prompt(self, query: str, context: str) -> Dict:
-        """Construct the LLM prompt"""
-        start = time.time()
-        
-        system_prompt = """You are a helpful assistant answering questions about documents.
-        Use the provided context to answer the user's question.
-        If the answer is not in the context, say "I don't have information about this."
-        """
-        
-        user_prompt = f"""Context:
-        {context}
-        
-        Question: {query}
-        
-        Answer:"""
-        
-        duration = (time.time() - start) * 1000
-        
-        return {
-            'name': 'Prompt Construction',
-            'status': 'completed',
-            'duration_ms': int(duration),
-            'details': f'Built prompt with {len(context.split())} words of context',
-            'prompt': [
-                {'role': 'system', 'content': system_prompt},
-                {'role': 'user', 'content': user_prompt}
-            ]
-        }
-    
-    def _call_llm(self, prompt: List) -> Dict:
-        """Call LLM API"""
-        start = time.time()
-        
-        response = self.llm.chat_completion(
-            messages=prompt,
-            model=self.config.get('model', 'gpt-4'),
-            temperature=self.config.get('temperature', 0.7),
-            max_tokens=self.config.get('max_tokens', 2000)
-        )
-        
-        duration = (time.time() - start) * 1000
-        
-        return {
-            'name': 'LLM Response',
-            'status': 'completed',
-            'duration_ms': int(duration),
-            'details': f'Generated {response["tokens"]} tokens',
-            'response': response['content'],
-            'tokens_used': response['tokens']
-        }
+    def _call_llm_with_fallback(self, prompt: List) -> Dict:
+        """Call primary LLM, fallback to secondary on failure"""
+        try:
+            return self.llm.chat_completion(
+                messages=prompt,
+                model=self.config.get('model', 'llama-3.3-70b-versatile'),
+                temperature=self.config.get('temperature', 0.7),
+                max_tokens=self.config.get('max_tokens', 2000)
+            )
+        except Exception:
+            fallback_model = self.config.get('fallback_model', 'llama-3.1-8b-instant')
+            return self.llm.chat_completion(
+                messages=prompt,
+                model=fallback_model,
+                temperature=self.config.get('temperature', 0.7)
+            )
 ```
 
 ---
@@ -774,7 +763,10 @@ def chunk_document(text, chunk_size=512, overlap=100):
 
 ```
 App/
+├── ErrorBoundary (wraps entire app)
+├── ToastProvider (notification context)
 ├── Router
+│  ├── LandingPage (welcome/feature showcase)
 │  ├── LoginScreen
 │  └── MainLayout
 │     ├── Sidebar
@@ -789,52 +781,117 @@ App/
 │        │  ├── Visualizer
 │        │  │  ├── StepsList
 │        │  │  ├── FlowGraph
-│        │  │  └── MetricsDisplay
+│        │  │  ├── MetricsDisplay (cost, latency, model, cache)
+│        │  │  └── EvaluationDisplay
 │        │  └── LeftSidebar
 │        │     ├── NewChatButton
-│        │     ├── DepartmentFilter
+│        │     ├── DepartmentFilter (SVG icons)
 │        │     ├── ChatHistory
-│        │     └── ChatMenus
+│        │     └── ChatMenus (SVG icons)
 │        │
 │        ├── DocumentsPage
-│        │  ├── DocumentUpload
+│        │  ├── DocumentUpload (single + batch)
 │        │  ├── DocumentList
 │        │  ├── DocumentFilters
-│        │  └── DocumentCard
+│        │  ├── DocumentCard (SVG icons)
+│        │  └── ProgressBar
 │        │
 │        ├── SettingsPage
-│        │  ├── APIKeyManagement
-│        │  ├── ModelConfiguration
-│        │  └── UserPreferences
+│        │  ├── ModelTiersInfo (read-only for non-admins)
+│        │  └── AdminOnlyConfig
 │        │
 │        └── AdminDashboard
 │           ├── UserManagement
 │           ├── DocumentAnalytics
 │           ├── AdminAnalytics
+│           ├── AdminRoster
+│           ├── AdminGraph
+│           ├── AdminSystemConfig (with tier labels)
 │           └── SystemMonitoring
 ```
 
 ### State Management Pattern
 
 ```javascript
-// QueryPage.jsx state structure
+// QueryPage.jsx state structure (v2.0)
 const [sessions, setSessions] = useState([])        // Chat sessions
 const [activeSessionId, setActiveSessionId] = useState(null)
-const [messages, setMessages] = useState([])        // Chat messages
+const [messages, setMessages] = useState([])        // Chat messages (with cost/metadata)
 const [adminActiveDepartment, setAdminActiveDepartment] = useState('All')
 const [openMenuId, setOpenMenuId] = useState(null)  // 3-dot menu
 const [editingSessionId, setEditingSessionId] = useState(null)
 const [executionSteps, setExecutionSteps] = useState([]) // RAG steps
 const [showVisualizer, setShowVisualizer] = useState(true)
+
+// Derived state (v2.0)
+const lastAssistantMsg = useMemo(
+  () => messages.filter(m => m.role === 'assistant').slice(-1)[0],
+  [messages]
+)
+```
+
+### Shared Constants & safeLocalStorage
+
+```javascript
+// src/utils/constants.js
+export const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8001/api';
+
+export const MODEL_TIERS = { ECONOMY: 'economy', STANDARD: 'standard', ADVANCED: 'advanced' };
+
+export const TIER_LABELS = {
+  [MODEL_TIERS.ECONOMY]: { label: 'Economy', color: '#648F64', bg: 'rgba(100, 143, 100, 0.12)' },
+  [MODEL_TIERS.STANDARD]: { label: 'Standard', color: '#6478A0', bg: 'rgba(100, 120, 160, 0.12)' },
+  [MODEL_TIERS.ADVANCED]: { label: 'Advanced', color: '#9A7832', bg: 'rgba(154, 120, 50, 0.12)' },
+};
+
+export const PROVIDER_MODELS = {
+  groq: [
+    { id: "llama-3.3-70b-versatile", name: "Llama 3.3 70B", tier: MODEL_TIERS.STANDARD },
+    { id: "llama-3.1-8b-instant", name: "Llama 3.1 8B", tier: MODEL_TIERS.ECONOMY }
+  ],
+  gemini: [
+    { id: "gemini-1.5-flash", name: "Gemini 1.5 Flash", tier: MODEL_TIERS.ECONOMY },
+    { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro", tier: MODEL_TIERS.ADVANCED }
+  ],
+  openai: [
+    { id: "gpt-4o-mini", name: "GPT-4o Mini", tier: MODEL_TIERS.ECONOMY },
+    { id: "gpt-4o", name: "GPT-4o", tier: MODEL_TIERS.ADVANCED }
+  ],
+  ollama: [
+    { id: "llama3", name: "Llama 3", tier: MODEL_TIERS.ECONOMY },
+  ]
+};
+
+export function safeLocalStorage() {
+  const store = {};
+  return {
+    getItem(key) {
+      if (typeof store[key] !== 'undefined') return store[key];
+      try { const v = localStorage.getItem(key); store[key] = v; return v; }
+      catch { return null; }
+    },
+    setItem(key, value) {
+      store[key] = value;
+      try { localStorage.setItem(key, value); } catch {}
+    },
+    removeItem(key) {
+      delete store[key];
+      try { localStorage.removeItem(key); } catch {}
+    }
+  };
+}
 ```
 
 ### API Call Patterns
 
 ```javascript
-// Fetch operations
+// Fetch operations (v2.0 uses safeLocalStorage + shared API_BASE)
+import { API_BASE, safeLocalStorage } from './constants';
+const storage = safeLocalStorage();
+
 const fetchSessions = async () => {
   const res = await fetch(`${API_BASE}/chat/sessions`, {
-    headers: { 'Authorization': `Bearer ${token}` }
+    headers: { 'Authorization': `Bearer ${storage.getItem('intradoc_token')}` }
   })
   return res.json()
 }
@@ -1108,8 +1165,13 @@ Backend:
 □ Run migrations
 □ Configure CORS for production domain
 □ Setup SSL certificates
-□ Configure logging
-□ Setup monitoring/alerts
+□ Configure logging (structured)
+□ Setup Redis server (for caching & job queue)
+□ Configure REDIS_URL env var
+□ Setup monitoring/alerts (Prometheus)
+□ Configure Langfuse tracing (optional)
+□ Enable structured logging
+□ Run RQ worker for async job processing
 
 Frontend:
 □ Build with npm run build
@@ -1130,6 +1192,6 @@ Infrastructure:
 
 ---
 
-**Last Updated**: May 2026
-**Version**: 1.0
+**Last Updated**: July 2026
+**Version**: 2.0
 **Status**: Production Ready

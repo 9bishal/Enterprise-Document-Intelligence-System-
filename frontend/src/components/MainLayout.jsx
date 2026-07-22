@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { SparklesIcon, LogOutIcon } from './Icons';
+import { SparklesIcon, LogOutIcon, ChatIcon, FileIcon, SettingsIcon, UsersIcon, MenuIcon } from './Icons';
 
 const MAIN_NAV_ITEMS = [
-  { path: '/query', icon: '💬', label: 'Query' },
-  { path: '/documents', icon: '📄', label: 'Documents' },
-  { path: '/settings', icon: '⚙️', label: 'Settings' },
+  { path: '/query', icon: ChatIcon, label: 'Query' },
+  { path: '/documents', icon: FileIcon, label: 'Documents' },
+  { path: '/settings', icon: SettingsIcon, label: 'Settings' },
 ];
 
 export default function MainLayout({ currentUser, userRole, userDepartment, onLogout }) {
@@ -16,7 +16,7 @@ export default function MainLayout({ currentUser, userRole, userDepartment, onLo
   const handleLogout = async () => {
     if (confirm('Are you sure you want to logout?')) {
       await onLogout();
-      navigate('/login');
+      navigate('/');
     }
   };
 
@@ -45,7 +45,7 @@ export default function MainLayout({ currentUser, userRole, userDepartment, onLo
               onClick={() => navigate(item.path)}
               title={item.label}
             >
-              <span className="nav-icon">{item.icon}</span>
+              <span className="nav-icon">{React.createElement(item.icon, { style: { width: 16, height: 16 } })}</span>
               <span className="nav-label">{item.label}</span>
             </button>
           ))}
@@ -66,7 +66,7 @@ export default function MainLayout({ currentUser, userRole, userDepartment, onLo
               onClick={handleAdminDashboard}
               title="Go to Admin Dashboard"
             >
-              👤 Admin Panel
+<UsersIcon style={{ width: 16, height: 16, verticalAlign: 'middle', marginRight: 6 }} /> Admin Panel
             </button>
           )}
 
@@ -84,7 +84,7 @@ export default function MainLayout({ currentUser, userRole, userDepartment, onLo
           className="mobile-menu-toggle"
           onClick={() => setIsMobileNavOpen(!isMobileNavOpen)}
         >
-          ☰
+<MenuIcon style={{ width: 20, height: 20 }} />
         </button>
       </header>
 
@@ -100,7 +100,7 @@ export default function MainLayout({ currentUser, userRole, userDepartment, onLo
                 setIsMobileNavOpen(false);
               }}
             >
-              <span>{item.icon}</span>
+              <span>{React.createElement(item.icon, { style: { width: 16, height: 16 } })}</span>
               <span>{item.label}</span>
             </button>
           ))}
@@ -112,7 +112,7 @@ export default function MainLayout({ currentUser, userRole, userDepartment, onLo
                 setIsMobileNavOpen(false);
               }}
             >
-              <span>👤</span>
+              <span><UsersIcon style={{ width: 16, height: 16 }} /></span>
               <span>Admin Panel</span>
             </button>
           )}
@@ -123,7 +123,7 @@ export default function MainLayout({ currentUser, userRole, userDepartment, onLo
               setIsMobileNavOpen(false);
             }}
           >
-            <span>🚪</span>
+            <LogOutIcon style={{ width: 16, height: 16 }} />
             <span>Logout</span>
           </button>
         </div>

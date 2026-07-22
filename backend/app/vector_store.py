@@ -11,10 +11,27 @@ import chromadb
 DEPARTMENTS = ['HR', 'Legal', 'Finance', 'Technical', 'General']
 
 
-# Local Embedding Class wrapper
+# Cache integration (lazy initialized)
+_cache_enabled = False
+_vector_cache = {}
+
+def _init_vector_cache():
+    global _cache_enabled, _vector_cache
+    if _cache_enabled:
+        return
+    try:
+        from django_backend.cache.embedding_cache import EmbeddingCache
+        from django_backend.cache.domain_caches import RetrievalCache
+        _vector_cache["embedding"] = EmbeddingCache()
+        _vector_cache["retrieval"] = RetrievalCache()
+        _cache_enabled = True
+    except Exception:
+        _cache_enabled = False
+
+EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
+
 class LocalSentenceTransformerEmbeddings:
-    def __init__(self, model_name="all-MiniLM-L6-v2"):
-        # Load the sentence transformer model locally
+    def __init__(self, model_name=EMBEDDING_MODEL_NAME):
         self.model = SentenceTransformer(model_name)
 
     def embed_documents(self, texts):
@@ -22,8 +39,18 @@ class LocalSentenceTransformerEmbeddings:
         return [list(map(float, e)) for e in embeddings]
 
     def embed_query(self, text):
+        _init_vector_cache()
+        if _cache_enabled:
+            ec = _vector_cache["embedding"]
+            cached = ec.get_embedding(text, EMBEDDING_MODEL_NAME)
+            if cached is not None:
+                return cached
         embedding = self.model.encode(text, show_progress_bar=False)
-        return list(map(float, embedding))
+        result = list(map(float, embedding))
+        if _cache_enabled:
+            ec = _vector_cache["embedding"]
+            ec.set_embedding(text, EMBEDDING_MODEL_NAME, result)
+        return result
 
 
 # Initialize ChromaDB client and local embeddings
@@ -75,46 +102,42 @@ def extract_text_from_file(filepath):
 
 def index_document(doc_id, filename, filepath, department='General'):
     """Index document chunks into the department-specific ChromaDB collection."""
-    # 1. Extract text page-by-page
+    from app.semantic_chunk import semantic_chunk
+
     pages_data = extract_text_from_file(filepath)
     if not pages_data:
         raise ValueError("No text could be extracted from the file.")
 
-    # 2. Chunk text with metadata
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=800, chunk_overlap=150, length_function=len
-    )
+    full_text = "\n\n".join(p["text"] for p in pages_data)
+    raw_chunks = semantic_chunk(full_text, target_tokens=300, overlap_sentences=2)
 
     chunks = []
     chunk_metadatas = []
     chunk_ids = []
 
-    chunk_index = 0
-    for page_info in pages_data:
-        page_text = page_info["text"]
-        page_num = page_info["page"]
-
-        split_texts = text_splitter.split_text(page_text)
-        for text_chunk in split_texts:
-            if not text_chunk.strip():
-                continue
-            chunks.append(text_chunk)
-            chunk_metadatas.append(
-                {
-                    "doc_id": doc_id,
-                    "filename": filename,
-                    "page": page_num,
-                    "chunk_index": chunk_index,
-                    "department": department,
-                }
-            )
-            chunk_ids.append(f"{doc_id}_chunk_{chunk_index}")
-            chunk_index += 1
+    for chunk_index, text_chunk in enumerate(raw_chunks):
+        stripped = text_chunk.strip()
+        if not stripped:
+            continue
+        first_sentence = stripped[:80].lower()
+        page = 1
+        for p in pages_data:
+            if first_sentence in p["text"].lower():
+                page = p["page"]
+                break
+        chunks.append(stripped)
+        chunk_metadatas.append({
+            "doc_id": doc_id,
+            "filename": filename,
+            "page": page,
+            "chunk_index": chunk_index,
+            "department": department,
+        })
+        chunk_ids.append(f"{doc_id}_chunk_{chunk_index}")
 
     if not chunks:
         raise ValueError("No text chunks generated.")
 
-    # 3. Generate embeddings and upload to department-specific Chroma collection
     chunk_embeddings = embeddings_model.embed_documents(chunks)
 
     target_collection = get_department_collection(department)
@@ -125,23 +148,30 @@ def index_document(doc_id, filename, filepath, department='General'):
         documents=chunks,
     )
 
-    return chunk_index
+    return len(chunks)
 
 
-def query_vector_store(query_text, n_results=4, doc_ids=None, department=None, admin_all=False):
+def query_vector_store(query_text, n_results=4, doc_ids=None, department=None, admin_all=False, use_hybrid=True):
     """
     Query the vector store with department scoping.
     - admin_all=True: query ALL department collections, merge and sort results
     - department specified: query only that department's collection
     - neither: fall back to default collection (backward compat)
+    - use_hybrid=True: fuse dense + BM25 via Reciprocal Rank Fusion
     """
-    # Security filter: if the user has no documents uploaded, return empty list immediately
     if doc_ids is not None and len(doc_ids) == 0:
         return []
 
+    _init_vector_cache()
+    cache_filters = {"n_results": n_results, "doc_ids": doc_ids, "department": department, "admin_all": admin_all}
+    if _cache_enabled:
+        rc = _vector_cache["retrieval"]
+        cached = rc.get_results(query_text, cache_filters)
+        if cached is not None:
+            return cached
+
     query_embedding = embeddings_model.embed_query(query_text)
 
-    # Construct Chroma DB filter clause
     where_clause = None
     if doc_ids is not None:
         if len(doc_ids) == 1:
@@ -149,134 +179,71 @@ def query_vector_store(query_text, n_results=4, doc_ids=None, department=None, a
         else:
             where_clause = {"doc_id": {"$in": doc_ids}}
 
+    dense_n = max(n_results * 3, 20) if use_hybrid else n_results
+
+    def _query_single(coll, n):
+        c = coll.count()
+        if c == 0:
+            return []
+        r = coll.query(query_embeddings=[query_embedding], n_results=min(n, c), where=where_clause)
+        out = []
+        if r and r["ids"] and len(r["ids"][0]) > 0:
+            for i in range(len(r["ids"][0])):
+                dist = r["distances"][0][i]
+                out.append({
+                    "id": r["ids"][0][i],
+                    "text": r["documents"][0][i],
+                    "filename": r["metadatas"][0][i]["filename"],
+                    "doc_id": r["metadatas"][0][i]["doc_id"],
+                    "page": r["metadatas"][0][i]["page"],
+                    "chunk_index": r["metadatas"][0][i]["chunk_index"],
+                    "department": r["metadatas"][0][i].get("department", department or "General"),
+                    "similarity": round((1 / (1 + dist)) * 100, 1),
+                })
+        return out
+
+    dense_results = []
     if admin_all:
-        # Admin Knowledge Graph: query ALL department collections and merge
-        all_chunks = []
+        seen = set()
         for dept in DEPARTMENTS:
             try:
-                dept_collection = get_department_collection(dept)
-                count = dept_collection.count()
-                if count == 0:
-                    continue
-                results = dept_collection.query(
-                    query_embeddings=[query_embedding],
-                    n_results=min(n_results, count),
-                    where=where_clause
-                )
-                if results and results["ids"] and len(results["ids"][0]) > 0:
-                    ids = results["ids"][0]
-                    documents = results["documents"][0]
-                    metadatas = results["metadatas"][0]
-                    distances = results["distances"][0]
-                    for i in range(len(ids)):
-                        dist = distances[i]
-                        similarity = round((1 / (1 + dist)) * 100, 1)
-                        all_chunks.append({
-                            "id": ids[i],
-                            "text": documents[i],
-                            "filename": metadatas[i]["filename"],
-                            "doc_id": metadatas[i]["doc_id"],
-                            "page": metadatas[i]["page"],
-                            "chunk_index": metadatas[i]["chunk_index"],
-                            "department": metadatas[i].get("department", dept),
-                            "similarity": similarity,
-                        })
-            except Exception as e:
-                print(f"Error querying department {dept}: {str(e)}")
+                for c in _query_single(get_department_collection(dept), dense_n):
+                    if c["id"] not in seen:
+                        seen.add(c["id"])
+                        dense_results.append(c)
+            except Exception:
                 continue
-
-        # Also query the legacy default collection for backward compat
         try:
-            legacy_count = collection.count()
-            if legacy_count > 0:
-                results = collection.query(
-                    query_embeddings=[query_embedding],
-                    n_results=min(n_results, legacy_count),
-                    where=where_clause
-                )
-                if results and results["ids"] and len(results["ids"][0]) > 0:
-                    ids = results["ids"][0]
-                    documents = results["documents"][0]
-                    metadatas = results["metadatas"][0]
-                    distances = results["distances"][0]
-                    for i in range(len(ids)):
-                        dist = distances[i]
-                        similarity = round((1 / (1 + dist)) * 100, 1)
-                        all_chunks.append({
-                            "id": ids[i],
-                            "text": documents[i],
-                            "filename": metadatas[i]["filename"],
-                            "doc_id": metadatas[i]["doc_id"],
-                            "page": metadatas[i]["page"],
-                            "chunk_index": metadatas[i]["chunk_index"],
-                            "department": metadatas[i].get("department", "General"),
-                            "similarity": similarity,
-                        })
+            for c in _query_single(collection, dense_n):
+                if c["id"] not in seen:
+                    seen.add(c["id"])
+                    dense_results.append(c)
         except Exception:
             pass
-
-        # Deduplicate by chunk ID, sort by similarity descending, return top n
-        seen_ids = set()
-        unique_chunks = []
-        for chunk in all_chunks:
-            if chunk["id"] not in seen_ids:
-                seen_ids.add(chunk["id"])
-                unique_chunks.append(chunk)
-
-        unique_chunks.sort(key=lambda x: x["similarity"], reverse=True)
-        return unique_chunks[:n_results]
-
     elif department:
-        # Department-scoped query
-        target_collection = get_department_collection(department)
-        count = target_collection.count()
-        if count == 0:
-            return []
-        results = target_collection.query(
-            query_embeddings=[query_embedding],
-            n_results=min(n_results, count),
-            where=where_clause
-        )
+        dense_results = _query_single(get_department_collection(department), dense_n)
     else:
-        # Backward compatibility: query default collection
-        count = collection.count()
-        if count == 0:
-            return []
-        results = collection.query(
-            query_embeddings=[query_embedding],
-            n_results=min(n_results, count),
-            where=where_clause
-        )
+        dense_results = _query_single(collection, dense_n)
 
-    retrieved_chunks = []
-    if not results or not results["ids"] or len(results["ids"][0]) == 0:
-        return retrieved_chunks
+    if not dense_results:
+        return []
 
-    ids = results["ids"][0]
-    documents = results["documents"][0]
-    metadatas = results["metadatas"][0]
-    distances = results["distances"][0]
+    if use_hybrid and len(dense_results) > 1:
+        from app.retrieval.bm25 import bm25_search
+        from app.retrieval.hybrid import reciprocal_rank_fusion
+        bm25_results = bm25_search(dense_results, query_text, top_k=len(dense_results))
+        fused = reciprocal_rank_fusion(dense_results, bm25_results)
+        result = fused[:n_results]
+    else:
+        dense_results.sort(key=lambda x: x["similarity"], reverse=True)
+        result = dense_results[:n_results]
 
-    for i in range(len(ids)):
-        # Chroma returns L2 distances. Convert to similarity score
-        # Cosine similarity approximation: 1 / (1 + distance)
-        dist = distances[i]
-        similarity = round((1 / (1 + dist)) * 100, 1)
+    if _cache_enabled and result:
+        doc_ids_for_cache = list(set(c["doc_id"] for c in result))
+        rc = _vector_cache["retrieval"]
+        rc.set_results(query_text, cache_filters, result, doc_ids=doc_ids_for_cache)
 
-        retrieved_chunks.append(
-            {
-                "id": ids[i],
-                "text": documents[i],
-                "filename": metadatas[i]["filename"],
-                "doc_id": metadatas[i]["doc_id"],
-                "page": metadatas[i]["page"],
-                "chunk_index": metadatas[i]["chunk_index"],
-                "department": metadatas[i].get("department", department or "General"),
-                "similarity": similarity,
-            }
-        )
-
-    return retrieved_chunks
+    return result
 
 
 def delete_document_from_index(doc_id, department=None):

@@ -117,3 +117,8 @@ config.json
 # Production
 .next/
 out/
+
+# External / scratch
+grok and claude skill test/
+review_1/
+c.txt

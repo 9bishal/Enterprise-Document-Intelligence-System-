@@ -1,16 +1,44 @@
 import os
 import json
+import time
 import urllib.request
 import urllib.error
 import ssl
 import google.generativeai as genai
-import urllib3
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+_is_debug = os.getenv("DEBUG", "False").lower() in ["true", "1", "yes"]
+if _is_debug:
+    import urllib3
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+    ssl_context = ssl.create_default_context()
+    ssl_context.check_hostname = False
+    ssl_context.verify_mode = ssl.CERT_NONE
+else:
+    ssl_context = ssl.create_default_context()
 
-# Create SSL context that doesn't verify certificates (for development)
-ssl_context = ssl.create_default_context()
-ssl_context.check_hostname = False
-ssl_context.verify_mode = ssl.CERT_NONE
+# Cache & metrics (lazy initialized)
+_cache_enabled = False
+_llm_cache = {}
+_llm_metrics = {}
+
+def _init_llm_cache():
+    global _cache_enabled, _llm_cache, _llm_metrics
+    if _cache_enabled:
+        return
+    try:
+        from django_backend.cache.domain_caches import PromptCache
+        from django_backend.cost_tracking.pricing import estimate_cost as ec, count_tokens as ct
+        from django_backend.monitoring.metrics import LLM_CALLS_TOTAL, LLM_LATENCY
+        _llm_cache["prompt"] = PromptCache()
+        _llm_metrics["calls"] = LLM_CALLS_TOTAL
+        _llm_metrics["latency"] = LLM_LATENCY
+        _llm_metrics["estimate_cost"] = ec
+        _llm_metrics["count_tokens"] = ct
+        _cache_enabled = True
+    except Exception:
+        _cache_enabled = False
+
+def _sanitize_key(key: str) -> str:
+    return key.strip() if key else ""
 
 def call_llm(
     prompt: str,
@@ -24,27 +52,34 @@ def call_llm(
     Universal LLM API Caller supporting Gemini, OpenAI, Groq, and Ollama.
     """
     provider = provider.lower()
+    _init_llm_cache()
+    cache_key_vars = {"prompt": prompt, "system_prompt": system_prompt, "provider": provider, "model": model_name, "temperature": temperature}
+    ct = _llm_metrics.get("count_tokens", lambda x: len(x)//4) if _cache_enabled else (lambda x: 0)
+    input_tokens = ct(prompt + system_prompt) if _cache_enabled else 0
+
+    # 1. Check prompt cache
+    if _cache_enabled:
+        cached = _llm_cache["prompt"].get_rendered("llm_response", cache_key_vars)
+        if cached is not None:
+            _llm_metrics["calls"].labels(provider, model_name or "unknown").inc()
+            return cached
+
+    start_time = time.time()
 
     # 1. Google Gemini
     if provider == "gemini":
         try:
-            # Fallback to env if api_key is not passed in the request
-            key = (
-                api_key
-                or os.environ.get("GEMINI_API_KEY")
-                or os.environ.get("GOOGLE_API_KEY")
-            )
+            key = _sanitize_key(api_key)
             if not key:
                 raise ValueError(
-                    "Gemini API Key is missing. Please configure it in Settings."
+                    "Gemini API Key is missing. Configure it in Admin Settings."
                 )
 
             genai.configure(api_key=key)
             name = model_name or "gemini-1.5-flash"
 
-            # Translate common naming
             if "gemini-2.5" in name.lower():
-                name = "gemini-1.5-flash"  # fallback to supported sdk models if 2.5 is not loaded
+                name = "gemini-1.5-flash"
 
             model = genai.GenerativeModel(
                 model_name=name,
@@ -52,7 +87,15 @@ def call_llm(
                 system_instruction=system_prompt if system_prompt else None,
             )
             response = model.generate_content(prompt)
-            return response.text
+            result = response.text
+
+            latency = time.time() - start_time
+            if _cache_enabled:
+                _llm_metrics["calls"].labels(provider, name).inc()
+                _llm_metrics["latency"].labels(provider, name).observe(latency)
+                _llm_cache["prompt"].set_rendered("llm_response", cache_key_vars, result)
+
+            return result
         except Exception as e:
             return f"Error with Gemini API: {str(e)}"
 
@@ -65,20 +108,20 @@ def call_llm(
         }
 
         if provider == "openai":
-            key = api_key or os.environ.get("OPENAI_API_KEY")
+            key = _sanitize_key(api_key)
             if not key:
                 raise ValueError(
-                    "OpenAI API Key is missing. Please configure it in Settings."
+                    "OpenAI API Key is missing. Configure it in Admin Settings."
                 )
             url = "https://api.openai.com/v1/chat/completions"
             headers["Authorization"] = f"Bearer {key}"
             name = model_name or "gpt-4o-mini"
 
         elif provider == "groq":
-            key = api_key or os.environ.get("GROQ_API_KEY")
+            key = _sanitize_key(api_key)
             if not key:
                 raise ValueError(
-                    "Groq API Key is missing. Please configure it in Settings."
+                    "Groq API Key is missing. Configure it in Admin Settings."
                 )
             url = "https://api.groq.com/openai/v1/chat/completions"
             headers["Authorization"] = f"Bearer {key}"
@@ -91,15 +134,13 @@ def call_llm(
         else:
             return f"Error: Unsupported provider '{provider}'"
 
-        # Construct messages payload
-        messages = []
+        messages_list = []
         if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": prompt})
+            messages_list.append({"role": "system", "content": system_prompt})
+        messages_list.append({"role": "user", "content": prompt})
 
-        payload = {"model": name, "messages": messages, "temperature": temperature}
+        payload = {"model": name, "messages": messages_list, "temperature": temperature}
 
-        # Check if the user wants JSON format
         if "JSON" in prompt:
             payload["response_format"] = {"type": "json_object"}
 
@@ -112,7 +153,15 @@ def call_llm(
             )
             with urllib.request.urlopen(req, timeout=45, context=ssl_context) as response:
                 res_data = json.loads(response.read().decode("utf-8"))
-                return res_data["choices"][0]["message"]["content"]
+                result = res_data["choices"][0]["message"]["content"]
+
+            latency = time.time() - start_time
+            if _cache_enabled:
+                _llm_metrics["calls"].labels(provider, name).inc()
+                _llm_metrics["latency"].labels(provider, name).observe(latency)
+                _llm_cache["prompt"].set_rendered("llm_response", cache_key_vars, result)
+
+            return result
         except urllib.error.HTTPError as e:
             try:
                 err_body = json.loads(e.read().decode("utf-8"))
@@ -124,18 +173,112 @@ def call_llm(
             return f"Error connecting to {provider.capitalize()} API: {str(e)}"
 
 
+API_KEY_PREFIXES = {
+    "groq": "gsk_",
+    "gemini": "AIza",
+    "openai": "sk-",
+}
+
+def _check_key_available(provider: str, api_keys: dict = None) -> bool:
+    key = _sanitize_key((api_keys or {}).get(provider, ""))
+    if not key:
+        return False
+    prefix = API_KEY_PREFIXES.get(provider)
+    if prefix and key.startswith(prefix):
+        return True
+    if not prefix:
+        return True
+    return False
+
+def _find_fallback_provider(primary: str, api_keys: dict = None) -> tuple[str, str]:
+    """Find a fallback provider that has a valid API key available.
+    Returns (provider, default_model)."""
+    candidates = [
+        ("groq", "llama-3.3-70b-versatile"),
+        ("gemini", "gemini-1.5-flash"),
+        ("openai", "gpt-4o-mini"),
+    ]
+    for fp, fm in candidates:
+        if fp != primary and _check_key_available(fp, api_keys):
+            return fp, fm
+    return ("groq", "llama-3.3-70b-versatile")
+
+def call_llm_with_fallback(
+    prompt: str,
+    system_prompt: str = "",
+    provider: str = "gemini",
+    api_key: str = "",
+    api_keys: dict = None,
+    primary_model: str = "",
+    fallback_provider: str = "",
+    fallback_model: str = "",
+    temperature: float = 0.2,
+) -> tuple[str, str]:
+    """Try primary model; on failure fall back to a different provider/model.
+    Falls back to env vars if api_key is empty.
+    Returns (response_text, model_used)."""
+    model_used = primary_model or f"{provider}_fast"
+
+    primary_key = _sanitize_key(api_key)
+    if not primary_key and api_keys:
+        primary_key = _sanitize_key(api_keys.get(provider, ""))
+
+    result = call_llm(
+        prompt=prompt,
+        system_prompt=system_prompt,
+        provider=provider,
+        api_key=primary_key,
+        model_name=primary_model,
+        temperature=temperature,
+    )
+    if not result.startswith("Error") and not result.startswith("HTTP Error"):
+        return result, model_used
+
+    fp = fallback_provider
+    fm = fallback_model
+    if not fp or not _check_key_available(fp, api_keys):
+        fp, fm = _find_fallback_provider(provider, api_keys)
+    if not fm:
+        fm = "llama-3.3-70b-versatile" if fp == "groq" else "gemini-1.5-flash"
+    model_used = fm
+
+    fallback_key = _sanitize_key((api_keys or {}).get(fp, ""))
+    print(f"Primary LLM failed, falling back to {fp}/{fm}: {result[:100]}")
+    result = call_llm(
+        prompt=prompt,
+        system_prompt=system_prompt,
+        provider=fp,
+        api_key=fallback_key,
+        model_name=fm,
+        temperature=temperature,
+    )
+    return result, model_used
+
+
 def call_llm_json(
     prompt: str,
     system_prompt: str = "",
     provider: str = "gemini",
     api_key: str = "",
+    api_keys: dict = None,
     model_name: str = "",
     temperature: float = 0.2,
 ) -> dict:
     """
     Utility that calls LLM and guarantees a parsed JSON dict return.
+    Falls back to a different provider if the primary call fails.
     """
-    res = call_llm(prompt, system_prompt, provider, api_key, model_name, temperature)
+    primary_key = _sanitize_key(api_key)
+    if not primary_key and api_keys:
+        primary_key = _sanitize_key(api_keys.get(provider, ""))
+
+    res = call_llm(prompt, system_prompt, provider, primary_key, model_name, temperature)
+
+    if res.startswith("Error") or res.startswith("HTTP Error"):
+        fp, fm = _find_fallback_provider(provider, api_keys)
+        fallback_key = _sanitize_key((api_keys or {}).get(fp, ""))
+        print(f"Primary LLM failed in call_llm_json, falling back to {fp}/{fm}: {res[:100]}")
+        res = call_llm(prompt, system_prompt, fp, fallback_key, fm, temperature)
 
     # Try to parse markdown JSON code blocks if the LLM returned it wrapped in ```json ... ```
     clean_res = res.strip()
