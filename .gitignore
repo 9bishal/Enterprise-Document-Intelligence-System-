@@ -62,13 +62,23 @@ dist/
 *.db
 *.sqlite
 *.sqlite3
-data/app.db
-data/chroma.sqlite3
+backend/db.sqlite3
+backend/data/app.db
+backend/data/chroma.sqlite3
 
 # Uploads
 uploads/
+backend/uploads/
 temp/
 tmp/
+backend/data/
+
+# Runtime / scratch test scripts (create these locally as needed)
+backend/check_db.py
+backend/get_token.py
+backend/test_*.py
+*.log
+backend/server.log
 
 # Logs
 logs/
@@ -84,6 +94,9 @@ Thumbs.db
 .coverage
 .pytest_cache/
 htmlcov/
+
+# Static build output (Django collectstatic output)
+backend/staticfiles/
 
 # Chroma data
 data/chroma/
@@ -117,8 +130,3 @@ config.json
 # Production
 .next/
 out/
-
-# External / scratch
-grok and claude skill test/
-review_1/
-c.txt

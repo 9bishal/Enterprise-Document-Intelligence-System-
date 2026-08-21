@@ -62,8 +62,6 @@ class AgentState(TypedDict):
 
 
 # 1. Retrieve Node
-RELEVANCE_THRESHOLD = 0.3
-
 def retrieve_node(state: AgentState) -> Dict[str, Any]:
     print("---RETRIEVING---")
     question = state["question"]
@@ -84,18 +82,9 @@ def retrieve_node(state: AgentState) -> Dict[str, Any]:
     from app.retrieval.context_builder import build_context
     context_block, used_chunks = build_context(ranked, max_context_tokens=max_context_tokens)
 
-    # Filter chunks by reranker relevance score (avoids an LLM call for grading)
-    filtered = [d for d in used_chunks if d.get("rerank_score", 0) >= RELEVANCE_THRESHOLD]
-    web_search = not filtered
-
-    if web_search:
-        print("No relevant chunks (reranker score below threshold). Activating web search fallback.")
-        filtered = used_chunks[:1]  # keep at least one chunk for context
-
     return {
-        "documents": filtered,
+        "documents": used_chunks,
         "context_block": context_block,
-        "web_search": web_search,
         "steps": ["retrieve"]
     }
 
@@ -136,7 +125,7 @@ def grade_documents_node(state: AgentState) -> Dict[str, Any]:
         prompt=prompt,
         system_prompt="You are a precise document relevance grading assistant. Return valid JSON only.",
         provider=model_config.get("provider", "gemini"),
-        api_keys=api_keys,
+        api_key=api_keys.get(model_config.get("provider", "gemini"), ""),
         model_name=model_config.get("model", ""),
         temperature=0.0,
     )
@@ -256,10 +245,11 @@ def generate_node(state: AgentState) -> Dict[str, Any]:
         context = "\n\n".join(context_list)
 
     system_prompt = """
-    You are Intradoc AI, an intelligent, professional document assistant. Answer the user's question comprehensively based ONLY on the provided document context. 
-    If the context does not contain enough information to answer, state that clearly rather than hallucinating.
-    Structure your answer with clear headings, bullet points, or lists where helpful. 
-    At the end of key statements, cite the sources by appending [1], [2], etc., corresponding to the indices of the documents provided.
+    You are Intradoc AI, a concise document assistant. Answer ONLY based on the provided document context.
+    If the context lacks enough information, state that clearly instead of guessing.
+    Keep your answer short and to the point - use short paragraphs or a brief bulleted list, no long exposition.
+    Cite the retrieved sources inline by appending [1], [2], etc., matching the Source indices below.
+    Never include any thinking, reasoning, analysis, or chain-of-thought text in your answer. Output only the final answer.
     """
 
     prompt = f"""
@@ -282,13 +272,13 @@ def generate_node(state: AgentState) -> Dict[str, Any]:
     from app.llm_helper import call_llm_with_fallback
     provider = model_config.get("provider", "gemini")
     primary_model = model_config.get("model", "")
-    fallback_provider = model_config.get("fallback_provider", "groq" if provider != "groq" else "gemini")
+    fallback_provider = model_config.get("fallback_provider", "")
     fallback_model = model_config.get("fallback_model", "")
-    generation, model_used = call_llm_with_fallback(
+    generation, model_used, prompt_cache_hit = call_llm_with_fallback(
         prompt=prompt,
         system_prompt=system_prompt,
         provider=provider,
-        api_keys=api_keys,
+        api_key=api_keys.get(provider, ""),
         primary_model=primary_model,
         fallback_provider=fallback_provider,
         fallback_model=fallback_model,
@@ -304,12 +294,13 @@ def generate_node(state: AgentState) -> Dict[str, Any]:
         "model_used": model_used,
         "steps": ["generate"],
         "regenerate_count": new_count,
+        "cache_hit": prompt_cache_hit,
     }
 
 
 def decide_to_generate(state: AgentState) -> str:
     """
-    Routes from retrieve to web_search or generate.
+    Routes from grade_documents to web_search or generate.
     """
     if state["web_search"]:
         return "web_search"
@@ -356,7 +347,7 @@ def grade_generation_node(state: AgentState) -> Dict[str, Any]:
         prompt=prompt,
         system_prompt="You are a precise binary hallucination evaluator. Return valid JSON only.",
         provider=model_config.get("provider", "gemini"),
-        api_keys=api_keys,
+        api_key=api_keys.get(model_config.get("provider", "gemini"), ""),
         model_name=model_config.get("model", ""),
         temperature=0.0,
     )
@@ -483,6 +474,7 @@ workflow = StateGraph(AgentState)
 
 # Add Nodes
 workflow.add_node("retrieve", retrieve_node)
+workflow.add_node("grade_documents", grade_documents_node)
 workflow.add_node("web_search", web_search_node)
 workflow.add_node("generate", generate_node)
 workflow.add_node("grade_generation", grade_generation_node)
@@ -491,12 +483,13 @@ workflow.add_node("grade_generation", grade_generation_node)
 workflow.set_entry_point("retrieve")
 
 # Add Static Edges
+workflow.add_edge("retrieve", "grade_documents")
 workflow.add_edge("web_search", "generate")
 workflow.add_edge("generate", "grade_generation")
 
 # Add Conditional Edges
 workflow.add_conditional_edges(
-    "retrieve",
+    "grade_documents",
     decide_to_generate,
     {"web_search": "web_search", "generate": "generate"},
 )
@@ -520,7 +513,11 @@ def run_rag_pipeline(question: str, api_keys: Dict[str, str], model_config: Dict
 
     # Check semantic cache first (RBAC-aware: only return hit if doc scope matches)
     if _cache_enabled:
-        cached = _semantic_cache.lookup(question)
+        try:
+            cached = _semantic_cache.lookup(question)
+        except Exception as e:
+            print(f"Semantic cache lookup failed (continuing without cache): {e}")
+            cached = None
         if cached is not None:
             cached_doc_ids = set(cached.get("metadata", {}).get("doc_ids", []) or [])
             current_doc_ids = set(user_doc_ids or [])
@@ -535,7 +532,10 @@ def run_rag_pipeline(question: str, api_keys: Dict[str, str], model_config: Dict
                 cost = ec(model_used, input_tokens, output_tokens)
 
                 if _cost_tracker:
-                    _cost_tracker.record(question, cached["response"], "semantic_cache", input_tokens, output_tokens, latency / 1000, cache_hit=True)
+                    try:
+                        _cost_tracker.record(question, cached["response"], "semantic_cache", input_tokens, output_tokens, latency / 1000, cache_hit=True)
+                    except Exception as e:
+                        print(f"Cost tracking failed (continuing): {e}")
 
                 _metrics["queries_total"].labels("semantic_cache", True, True).inc()
                 _metrics["cost_total"].labels("semantic_cache").inc(cost)
@@ -622,14 +622,17 @@ def run_rag_pipeline(question: str, api_keys: Dict[str, str], model_config: Dict
         output_tokens = ct(generation)
         cost = ec(model, input_tokens, output_tokens)
 
-        is_error = generation.startswith("Error") or generation.startswith("HTTP Error")
-
         if _cache_enabled:
-            if not is_error:
+            try:
                 _semantic_cache.store(question, generation, doc_ids=user_doc_ids)
+            except Exception as e:
+                print(f"Semantic cache store failed (continuing): {e}")
 
         if _cost_tracker:
-            _cost_tracker.record(question, generation, model, input_tokens, output_tokens, latency / 1000, cache_hit=False)
+            try:
+                _cost_tracker.record(question, generation, model, input_tokens, output_tokens, latency / 1000, cache_hit=False)
+            except Exception as e:
+                print(f"Cost tracking failed (continuing): {e}")
 
         if _cache_enabled:
             _metrics["queries_total"].labels(model, False, True).inc()
@@ -641,7 +644,7 @@ def run_rag_pipeline(question: str, api_keys: Dict[str, str], model_config: Dict
         try:
             from app.evaluation.evaluator import heuristic_scores, llm_judge
             evaluation_result = heuristic_scores(generation, documents)
-            judge = llm_judge(question, final_state.get("context_block", ""), generation, api_keys=api_keys)
+            judge = llm_judge(question, final_state.get("context_block", ""), generation)
             if judge:
                 evaluation_result["judge"] = judge
         except Exception:
@@ -667,8 +670,8 @@ def run_rag_pipeline(question: str, api_keys: Dict[str, str], model_config: Dict
             "generation": generation,
             "documents": documents,
             "steps": executed_steps,
-            "success": not is_error,
-            "cache_hit": False,
+            "success": True,
+            "cache_hit": final_state.get("cache_hit", False),
             "model_used": model,
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
