@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import styles from './AdminStyles';
-import { CheckCircleIcon, XCircleIcon, MailIcon, UsersIcon } from '../Icons';
+import { CheckCircleIcon, MailIcon, UsersIcon } from '../Icons';
+import { useDepartments } from '../../utils/useDepartments';
 
 export default function AdminRoster({ users, authHeaders, API_BASE, onRefreshUsers }) {
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('Viewer');
   const [inviteDept, setInviteDept] = useState('General');
   const [inviteMsg, setInviteMsg] = useState('');
+  const departments = useDepartments(false);
 
   const handleInvite = async (e) => {
     e.preventDefault();
@@ -25,7 +27,7 @@ export default function AdminRoster({ users, authHeaders, API_BASE, onRefreshUse
         setInviteMsg(`Error: ${data.detail}`);
       }
     } catch (e) {
-      setInviteMsg('Network error sending invitation');
+      setInviteMsg('Error: Network error sending invitation');
     }
   };
 
@@ -72,11 +74,9 @@ export default function AdminRoster({ users, authHeaders, API_BASE, onRefreshUse
           <div>
             <label style={styles.label}>Department</label>
             <select value={inviteDept} onChange={e => setInviteDept(e.target.value)} style={styles.input}>
-              <option value="General">General</option>
-              <option value="HR">HR</option>
-              <option value="Legal">Legal</option>
-              <option value="Finance">Finance</option>
-              <option value="Technical">Technical</option>
+              {departments.map(d => (
+                <option key={d} value={d}>{d}</option>
+              ))}
             </select>
           </div>
           <button type="submit" className="action-btn primary" style={{ padding: '10px 20px', height: '42px' }}>
@@ -126,11 +126,9 @@ export default function AdminRoster({ users, authHeaders, API_BASE, onRefreshUse
                     onChange={(e) => handleUpdateUser(u.id, 'department', e.target.value)}
                     style={{ ...styles.input, padding: '4px 8px', fontSize: '12px', height: 'auto' }}
                   >
-                    <option value="General">General</option>
-                    <option value="HR">HR</option>
-                    <option value="Legal">Legal</option>
-                    <option value="Finance">Finance</option>
-                    <option value="Technical">Technical</option>
+                    {departments.map(d => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
                   </select>
                 </td>
               </tr>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { FileIcon, UploadIcon, TrashIcon, FolderIcon, AlertTriangleIcon } from '../components/Icons';
 import { safeLocalStorage } from '../utils/constants';
+import { useDepartments } from '../utils/useDepartments';
 const storage = safeLocalStorage();
 
 export default function DocumentsPage({
@@ -17,6 +18,7 @@ export default function DocumentsPage({
   const fileInputRef = useRef(null);
 
   const token = storage.getItem('intradoc_token');
+  const departments = useDepartments(true);
 
   // --- Fetch documents initially and when active department changes ---
   useEffect(() => {
@@ -210,11 +212,9 @@ export default function DocumentsPage({
                 onChange={(e) => setAdminActiveDepartment(e.target.value)}
               >
                 <option value="All Departments">All Departments</option>
-                <option value="HR">HR</option>
-                <option value="Legal">Legal</option>
-                <option value="Finance">Finance</option>
-                <option value="Technical">Technical</option>
-                <option value="General">General</option>
+                {departments.filter(d => d !== 'All Departments').map(d => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
               </select>
             </div>
           )}
@@ -344,13 +344,13 @@ export default function DocumentsPage({
           margin: 0;
           font-size: 28px;
           font-weight: 700;
-          color: #1a1c20;
+          color: #111111;
         }
 
         .subtitle {
           margin: 8px 0 0 0;
           font-size: 14px;
-          color: #8b92a0;
+          color: #9ca3af;
         }
 
         .stats-grid {
@@ -366,35 +366,35 @@ export default function DocumentsPage({
           justify-content: center;
           padding: 20px;
           background: white;
-          border: 1px solid rgba(36, 50, 82, 0.08);
+          border: 1px solid rgba(0, 0, 0, 0.08);
           border-radius: 12px;
           gap: 8px;
           transition: all 0.2s;
         }
 
         .stat-card:hover {
-          border-color: rgba(36, 50, 82, 0.15);
+          border-color: rgba(0, 0, 0, 0.15);
           box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
         }
 
         .stat-card.indexed {
-          border-color: rgba(100, 150, 100, 0.3);
-          background: rgba(100, 150, 100, 0.05);
+          border-color: rgba(21, 128, 61, 0.3);
+          background: rgba(21, 128, 61, 0.05);
         }
 
         .stat-card.ingesting {
-          border-color: rgba(150, 120, 50, 0.3);
-          background: rgba(150, 120, 50, 0.05);
+          border-color: rgba(180, 83, 9, 0.3);
+          background: rgba(180, 83, 9, 0.05);
         }
 
         .stat-card.failed {
-          border-color: rgba(200, 100, 100, 0.3);
-          background: rgba(200, 100, 100, 0.05);
+          border-color: rgba(220, 38, 38, 0.3);
+          background: rgba(220, 38, 38, 0.05);
         }
 
         .stat-label {
           font-size: 12px;
-          color: #8b92a0;
+          color: #9ca3af;
           font-weight: 600;
           text-transform: uppercase;
         }
@@ -402,12 +402,12 @@ export default function DocumentsPage({
         .stat-value {
           font-size: 28px;
           font-weight: 700;
-          color: #1a1c20;
+          color: #111111;
         }
 
         .upload-section {
           background: white;
-          border: 2px dashed rgba(3, 7, 18, 0.2);
+          border: 2px dashed rgba(0, 0, 0, 0.2);
           border-radius: 12px;
           padding: 32px;
           display: flex;
@@ -418,8 +418,8 @@ export default function DocumentsPage({
         }
 
         .upload-section:hover {
-          border-color: rgba(3, 7, 18, 0.4);
-          background: rgba(3, 7, 18, 0.02);
+          border-color: rgba(0, 0, 0, 0.4);
+          background: rgba(0, 0, 0, 0.02);
         }
 
         .upload-content {
@@ -435,19 +435,21 @@ export default function DocumentsPage({
           align-items: center;
           gap: 8px;
           padding: 12px 24px;
-          background: rgba(3, 7, 18, 0.1);
-          border: 1px solid rgba(3, 7, 18, 0.2);
+          background: #111111;
+          border: 1px solid #111111;
           border-radius: 8px;
           font-size: 14px;
           font-weight: 600;
-          color: #030712;
+          color: #ffffff;
           cursor: pointer;
           transition: all 0.2s;
         }
 
         .upload-btn:hover:not(:disabled) {
-          background: rgba(3, 7, 18, 0.15);
-          border-color: rgba(3, 7, 18, 0.3);
+          background: #333333;
+          border-color: #333333;
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
         }
 
         .upload-btn:disabled {
@@ -464,22 +466,29 @@ export default function DocumentsPage({
         .department-selector label {
           font-size: 13px;
           font-weight: 600;
-          color: #1a1c20;
+          color: #111111;
         }
 
         .department-selector select {
           padding: 8px 12px;
-          border: 1px solid rgba(36, 50, 82, 0.15);
+          border: 1px solid rgba(0, 0, 0, 0.15);
           border-radius: 6px;
           font-size: 13px;
-          color: #1a1c20;
+          color: #111111;
           background: white;
           cursor: pointer;
+          transition: all 0.2s;
+        }
+
+        .department-selector select:focus {
+          outline: none;
+          border-color: #111111;
+          box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.08);
         }
 
         .upload-help {
           font-size: 12px;
-          color: #8b92a0;
+          color: #9ca3af;
           margin: 0;
         }
 
@@ -491,7 +500,7 @@ export default function DocumentsPage({
           background: white;
           padding: 16px;
           border-radius: 12px;
-          border: 1px solid rgba(36, 50, 82, 0.08);
+          border: 1px solid rgba(0, 0, 0, 0.08);
           flex-wrap: wrap;
         }
 
@@ -506,7 +515,7 @@ export default function DocumentsPage({
         .sort-group label {
           font-size: 13px;
           font-weight: 600;
-          color: #1a1c20;
+          color: #111111;
           white-space: nowrap;
         }
 
@@ -518,34 +527,42 @@ export default function DocumentsPage({
         .filter-btn {
           padding: 6px 12px;
           background: transparent;
-          border: 1px solid rgba(36, 50, 82, 0.15);
+          border: 1px solid rgba(0, 0, 0, 0.15);
           border-radius: 6px;
           font-size: 12px;
           font-weight: 600;
-          color: #8b92a0;
+          color: #525252;
           cursor: pointer;
           transition: all 0.2s;
         }
 
         .filter-btn:hover {
-          border-color: rgba(36, 50, 82, 0.3);
-          color: #1a1c20;
+          border-color: rgba(0, 0, 0, 0.3);
+          color: #111111;
+          background: rgba(0, 0, 0, 0.03);
         }
 
         .filter-btn.active {
-          background: rgba(3, 7, 18, 0.1);
-          border-color: rgba(3, 7, 18, 0.3);
-          color: #030712;
+          background: #111111;
+          border-color: #111111;
+          color: #ffffff;
         }
 
         .sort-group select {
           padding: 6px 10px;
-          border: 1px solid rgba(36, 50, 82, 0.15);
+          border: 1px solid rgba(0, 0, 0, 0.15);
           border-radius: 6px;
           font-size: 12px;
-          color: #1a1c20;
+          color: #111111;
           background: white;
           cursor: pointer;
+          transition: all 0.2s;
+        }
+
+        .sort-group select:focus {
+          outline: none;
+          border-color: #111111;
+          box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.08);
         }
 
         .documents-container {
@@ -566,13 +583,13 @@ export default function DocumentsPage({
         .empty-state p {
           font-size: 16px;
           font-weight: 600;
-          color: #1a1c20;
+          color: #111111;
           margin: 0;
         }
 
         .empty-state span {
           font-size: 13px;
-          color: #8b92a0;
+          color: #9ca3af;
         }
 
         .documents-grid {
@@ -583,7 +600,7 @@ export default function DocumentsPage({
 
         .document-item {
           background: white;
-          border: 1px solid rgba(36, 50, 82, 0.08);
+          border: 1px solid rgba(0, 0, 0, 0.08);
           border-radius: 12px;
           padding: 16px;
           transition: all 0.2s;
@@ -593,7 +610,7 @@ export default function DocumentsPage({
         }
 
         .document-item:hover {
-          border-color: rgba(36, 50, 82, 0.15);
+          border-color: rgba(0, 0, 0, 0.15);
           box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
         }
 
@@ -609,24 +626,27 @@ export default function DocumentsPage({
           justify-content: center;
           width: 48px;
           height: 48px;
-          background: rgba(3, 7, 18, 0.05);
+          background: rgba(0, 0, 0, 0.05);
           border-radius: 8px;
         }
 
         .doc-icon {
           width: 24px;
           height: 24px;
-          color: #030712;
+          color: #111111;
         }
 
         .delete-btn {
           background: none;
           border: none;
-          color: #C8644A;
+          color: #dc2626;
           cursor: pointer;
           padding: 4px 8px;
           transition: all 0.2s;
           opacity: 0.6;
+          display: flex;
+          align-items: center;
+          justify-content: center;
         }
 
         .delete-btn:hover {
@@ -643,7 +663,7 @@ export default function DocumentsPage({
           margin: 0;
           font-size: 14px;
           font-weight: 600;
-          color: #1a1c20;
+          color: #111111;
           word-break: break-word;
           white-space: normal;
           overflow: hidden;
@@ -656,7 +676,7 @@ export default function DocumentsPage({
         .doc-meta {
           margin: 0;
           font-size: 12px;
-          color: #8b92a0;
+          color: #9ca3af;
         }
 
         .doc-tags {
@@ -669,38 +689,38 @@ export default function DocumentsPage({
           display: inline-flex;
           align-items: center;
           padding: 4px 8px;
-          background: rgba(36, 50, 82, 0.05);
-          border: 1px solid rgba(36, 50, 82, 0.1);
+          background: rgba(0, 0, 0, 0.05);
+          border: 1px solid rgba(0, 0, 0, 0.1);
           border-radius: 4px;
           font-size: 11px;
           font-weight: 600;
-          color: #5b6472;
+          color: #525252;
           white-space: nowrap;
         }
 
         .tag.risk {
-          background: rgba(200, 100, 100, 0.1);
-          border-color: rgba(200, 100, 100, 0.3);
-          color: #C8644A;
+          background: rgba(220, 38, 38, 0.1);
+          border-color: rgba(220, 38, 38, 0.3);
+          color: #dc2626;
         }
 
         .tag.department {
-          background: rgba(100, 120, 150, 0.1);
-          border-color: rgba(100, 120, 150, 0.3);
-          color: #6478A0;
+          background: rgba(0, 0, 0, 0.06);
+          border-color: rgba(0, 0, 0, 0.15);
+          color: #111111;
         }
 
         .progress-bar {
           width: 100%;
           height: 4px;
-          background: rgba(36, 50, 82, 0.1);
+          background: rgba(0, 0, 0, 0.1);
           border-radius: 2px;
           overflow: hidden;
         }
 
         .progress-fill {
           height: 100%;
-          background: linear-gradient(90deg, #6478A0, #4A9D83);
+          background: #111111;
           animation: progress-animation 1.5s ease-in-out infinite;
         }
 
@@ -713,7 +733,7 @@ export default function DocumentsPage({
         .error-msg {
           margin: 0;
           font-size: 11px;
-          color: #C8644A;
+          color: #dc2626;
         }
 
         @media (max-width: 768px) {

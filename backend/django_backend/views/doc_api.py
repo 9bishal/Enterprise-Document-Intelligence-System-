@@ -7,9 +7,10 @@ from functools import partial
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
+from rest_framework.permissions import AllowAny, IsAuthenticated
 
 # Custom imports
-from django_backend.models import Document
+from django_backend.models import Document, DEPT_CHOICES
 from django_backend.permissions import IsViewerOrAbove, IsEditorOrAbove
 from django_backend.serializers import DocumentSerializer
 from app.vector_store import delete_document_from_index
@@ -20,6 +21,23 @@ UPLOADS_DIR = os.path.join(BASE_DIR, "uploads")
 os.makedirs(UPLOADS_DIR, exist_ok=True)
 
 _REDIS_URL = os.getenv("INTRADOC_REDIS_URL", "redis://localhost:6379/0")
+
+_INGESTION_POOL = None
+
+def _get_pool():
+    global _INGESTION_POOL
+    if _INGESTION_POOL is None:
+        from concurrent.futures import ThreadPoolExecutor
+        _INGESTION_POOL = ThreadPoolExecutor(max_workers=2, thread_name_prefix="ingest")
+    return _INGESTION_POOL
+
+def _rq_worker_alive(conn):
+    try:
+        import rq
+        workers = [w for w in rq.Worker.all(connection=conn) if "ingestion" in w.queue_names()]
+        return len(workers) > 0
+    except Exception:
+        return False
 
 def _get_queue():
     try:
@@ -33,15 +51,15 @@ def _get_queue():
 
 def _schedule_indexing(doc_id, filename, filepath, department):
     q = _get_queue()
-    if q is not None:
+    # Only use RQ when a worker is actually consuming the queue; otherwise run
+    # in-process so uploads never get stuck in "ingesting".
+    if q is not None and _rq_worker_alive(q.connection):
         from rq import Retry
         q.enqueue(process_document_indexing, doc_id, filename, filepath, department,
                   retry=Retry(max=3, interval=[10, 30, 60]),
                   job_timeout=600)
     else:
-        from concurrent.futures import ThreadPoolExecutor
-        pool = ThreadPoolExecutor(max_workers=4)
-        pool.submit(process_document_indexing, doc_id, filename, filepath, department)
+        _get_pool().submit(process_document_indexing, doc_id, filename, filepath, department)
 
 def _save_uploaded_file(file, doc_id, filename):
     filepath = os.path.join(UPLOADS_DIR, f"{doc_id}_{filename}")
@@ -211,3 +229,8 @@ def delete_document(request, doc_id):
     # Delete SQLite metadata record
     doc.delete()
     return Response({"status": "success", "message": f"Document '{doc.filename}' deleted successfully."})
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_departments(request):
+    return Response({"departments": [value for value, label in DEPT_CHOICES]})

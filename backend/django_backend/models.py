@@ -105,22 +105,22 @@ class LLMConfig(models.Model):
     openai_api_key = models.CharField(max_length=512, blank=True)
 
     def get_groq_key(self):
-        return (_decrypt_value(self.groq_api_key) or "").strip()
+        return _decrypt_value(self.groq_api_key)
 
     def get_gemini_key(self):
-        return (_decrypt_value(self.gemini_api_key) or "").strip()
+        return _decrypt_value(self.gemini_api_key)
 
     def get_openai_key(self):
-        return (_decrypt_value(self.openai_api_key) or "").strip()
+        return _decrypt_value(self.openai_api_key)
 
     def set_groq_key(self, value):
-        self.groq_api_key = _encrypt_value((value or "").strip())
+        self.groq_api_key = _encrypt_value(value)
 
     def set_gemini_key(self, value):
-        self.gemini_api_key = _encrypt_value((value or "").strip())
+        self.gemini_api_key = _encrypt_value(value)
 
     def set_openai_key(self, value):
-        self.openai_api_key = _encrypt_value((value or "").strip())
+        self.openai_api_key = _encrypt_value(value)
 
     def masked_keys(self):
         return {

@@ -17,20 +17,14 @@ def heuristic_scores(answer: str, context_chunks: list[dict]) -> dict:
     supported = sum(1 for w in answer_words if w in contextual_keywords)
     total = max(len(answer_words), 1)
     faithfulness = round(supported / total, 4)
-    groundedness_score = round(faithfulness * 10, 1)
-    relevance_score = round(min(1.0, len(context_chunks) / 5) * 10, 1)
-    overall_score = round((groundedness_score + relevance_score) / 2, 1)
     return {
         "faithfulness": faithfulness,
         "context_utilization": round(min(1.0, len(context_chunks) / 5), 4),
-        "relevance_score": relevance_score,
-        "groundedness_score": groundedness_score,
-        "overall_score": overall_score,
         "answer_length_chars": len(answer),
         "estimated_tokens": _estimate_tokens(answer),
     }
 
-def llm_judge(question: str, context_block: str, answer: str, api_keys: dict = None) -> Optional[dict]:
+def llm_judge(question: str, context_block: str, answer: str) -> Optional[dict]:
     if random.random() > SAMPLE_RATE:
         return None
     prompt = f"""Evaluate the answer quality based on the context provided.
@@ -49,12 +43,16 @@ Return a JSON object with:
 - "overall": 0.0 to 1.0 (overall quality)
 - "brief_feedback": "one sentence summary" """
     try:
-        from app.llm_helper import call_llm_json
+        from app.llm_helper import call_llm_json, resolve_llm_config
+        llm_cfg = resolve_llm_config()
+        if not llm_cfg:
+            return None
         res = call_llm_json(
             prompt=prompt,
             system_prompt="You are a strict RAG evaluation judge. Return valid JSON only.",
-            provider="gemini",
-            api_keys=api_keys,
+            provider=llm_cfg["provider"],
+            api_key=llm_cfg["api_key"],
+            model_name=llm_cfg["model"],
             temperature=0.0,
         )
         return {

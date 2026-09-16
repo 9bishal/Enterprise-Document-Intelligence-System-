@@ -80,6 +80,9 @@ backend/test_*.py
 *.log
 backend/server.log
 start_redis.sh
+table_text_extraction.txt
+table_text_extraction*.txt
+*.tmp.txt
 
 # Logs
 logs/

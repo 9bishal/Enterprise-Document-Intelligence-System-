@@ -59,11 +59,11 @@ def update_admin_llm_config(request):
     if 'k' in cfg: config.k = cfg['k']
     
     keys = data.get("api_keys", {})
-    if "groq" in keys and "*" not in keys["groq"]:
+    if "groq" in keys and keys["groq"] and "*" not in keys["groq"]:
         config.set_groq_key(keys["groq"])
-    if "gemini" in keys and "*" not in keys["gemini"]:
+    if "gemini" in keys and keys["gemini"] and "*" not in keys["gemini"]:
         config.set_gemini_key(keys["gemini"])
-    if "openai" in keys and "*" not in keys["openai"]:
+    if "openai" in keys and keys["openai"] and "*" not in keys["openai"]:
         config.set_openai_key(keys["openai"])
         
     config.save()

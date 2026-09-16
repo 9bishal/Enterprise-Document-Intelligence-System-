@@ -37,30 +37,14 @@
 │  └──────────┬───────────────────────────────────────────────┘   │
 │  ┌──────────▼───────────────────────────────────────────────┐   │
 │  │ RAG Pipeline Layer (app/)                                │   │
-│  │ - Hybrid Retrieval (Dense + BM25 via RRF)                │   │
-│  │ - Reranking & Threshold Filtering                        │   │
-│  │ - Context Assembly (token-budget-aware)                  │   │
-│  │ - LLM Orchestration (with fallback)                      │   │
+│  │ - Document Retrieval (Vector Search)                     │   │
+│  │ - Context Processing                                     │   │
+│  │ - LLM Orchestration                                      │   │
 │  │ - Response Generation                                    │   │
-│  │ - Evaluation (heuristic + LLM judge)                     │   │
-│  └──────────┬───────────────────────────────────────────────┘   │
-│  ┌──────────▼───────────────────────────────────────────────┐   │
-│  │ Caching & Cost Layer                                     │   │
-│  │ - Semantic Cache (RBAC-aware)                            │   │
-│  │ - Embedding Cache                                        │   │
-│  │ - Domain Caches                                          │   │
-│  │ - Cost Tracking & Pricing                                │   │
-│  └──────────┬───────────────────────────────────────────────┘   │
-│  ┌──────────▼───────────────────────────────────────────────┐   │
-│  │ Monitoring Layer                                         │   │
-│  │ - Prometheus Metrics                                     │   │
-│  │ - Langfuse Tracing                                       │   │
-│  │ - Health Checks                                          │   │
-│  │ - Structured Logging                                     │   │
 │  └──────────┬───────────────────────────────────────────────┘   │
 │  ┌──────────▼───────────────────────────────────────────────┐   │
 │  │ Data Access Layer                                        │   │
-│  │ - Django ORM                                             │   │
+│  │ - SQLAlchemy ORM                                         │   │
 │  │ - Database Models                                        │   │
 │  │ - Query Optimization                                     │   │
 │  └──────────┬───────────────────────────────────────────────┘   │
@@ -68,10 +52,10 @@
         ┌───────────────────┼───────────────────┐
         │                   │                   │
         ▼                   ▼                   ▼
-    ┌───────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐
-    │ SQLite│    │  Chroma  │    │   LLM    │    │  Redis   │
-    │ (DB)  │    │(Vector)  │    │   API    │    │(Cache/Q) │
-    └───────┘    └──────────┘    └──────────┘    └──────────┘
+    ┌───────┐         ┌──────────┐       ┌──────────┐
+    │ SQLite│         │  Chroma  │       │   LLM    │
+    │ (DB)  │         │(Vector)  │       │   API    │
+    └───────┘         └──────────┘       └──────────┘
 ```
 
 ## 📁 Directory Structure (Detailed)
@@ -92,34 +76,22 @@ document_intelligent_system/
 │   │   ├── main.py              # Application startup
 │   │   ├── database.py          # Database initialization
 │   │   ├── rag_graph.py         # ★ RAG Pipeline execution
-│   │   │                        #   - Hybrid retrieval step
-│   │   │                        #   - Reranking step
-│   │   │                        #   - LLM generation step (with fallback)
+│   │   │                        #   - Retrieval step
+│   │   │                        #   - Processing step
+│   │   │                        #   - LLM generation step
 │   │   │                        #   - Step tracking
 │   │   ├── llm_helper.py        # ★ LLM API Integration
-│   │   │                        #   - Multi-provider calls (Groq/Gemini/OpenAI/Ollama)
-│   │   │                        #   - call_llm_with_fallback (primary → secondary)
-│   │   │                        #   - Token counting & cost estimation
-│   │   │                        #   - Prometheus metrics
-│   │   ├── vector_store.py      # ★ Vector Database (Chroma)
-│   │   │                        #   - Hybrid search (dense + BM25)
-│   │   │                        #   - Semantic chunking
-│   │   │                        #   - Embedding cache
-│   │   ├── analytics.py         # Langfuse tracing integration
-│   │   ├── semantic_chunk.py    # Semantic document chunking
-│   │   ├── evaluation/          # Response evaluation
-│   │   │   ├── __init__.py
-│   │   │   └── evaluator.py     # Heuristic + LLM judge
-│   │   └── retrieval/           # Hybrid retrieval pipeline
-│   │       ├── __init__.py
-│   │       ├── hybrid.py        # Dense + BM25 fusion via RRF
-│   │       ├── bm25.py          # BM25 keyword search
-│   │       ├── reranker.py      # Relevance reranking
-│   │       └── context_builder.py # Token-budget-aware context assembly
+│   │   │                        #   - OpenAI/Claude calls
+│   │   │                        #   - SSL certificate handling
+│   │   │                        #   - Error handling
+│   │   └── vector_store.py      # ★ Vector Database (Chroma)
+│   │                            #   - Semantic search
+│   │                            #   - Document indexing
+│   │                            #   - Similarity queries
 │   │
 │   ├── django_backend/          # Django Configuration
 │   │   ├── __init__.py
-│   │   ├── settings.py          # Django settings, Redis config, structured logging
+│   │   ├── settings.py          # Django settings, middleware
 │   │   ├── urls.py              # URL routing configuration
 │   │   ├── wsgi.py              # WSGI entry point
 │   │   ├── asgi.py              # ASGI entry point (async)
@@ -131,38 +103,18 @@ document_intelligent_system/
 │   │   │                        #   - User
 │   │   │                        #   - Document
 │   │   │                        #   - ChatSession
-│   │   │                        #   - ChatMessage (with cost/latency/cache fields)
-│   │   │                        #   - LLMConfig (with encrypted API keys)
+│   │   │                        #   - ChatMessage
+│   │   │                        #   - LLMConfig
 │   │   ├── serializers.py       # DRF Serializers
 │   │   │                        #   - UserSerializer
 │   │   │                        #   - DocumentSerializer
 │   │   │                        #   - ChatSessionSerializer
-│   │   │                        #   - ChatMessageSerializer (with cost/model fields)
+│   │   │                        #   - ChatMessageSerializer
 │   │   ├── permissions.py       # ★ Permission Classes
 │   │   │                        #   - IsViewerOrAbove
 │   │   │                        #   - IsEditorOrAbove
 │   │   │                        #   - IsAdmin
 │   │   │                        #   - IsOwnerOrAdmin
-│   │   │
-│   │   ├── cache/               # Multi-layer caching
-│   │   │   ├── __init__.py
-│   │   │   ├── base.py          # Cache base class
-│   │   │   ├── config.py        # Cache configuration
-│   │   │   ├── semantic_cache.py # ★ RBAC-aware semantic response cache
-│   │   │   ├── embedding_cache.py # Embedding cache
-│   │   │   ├── domain_caches.py # Domain-specific caches
-│   │   │   ├── manager.py       # Cache manager
-│   │   │   └── metrics.py       # Cache metrics
-│   │   │
-│   │   ├── cost_tracking/       # LLM Cost tracking
-│   │   │   ├── __init__.py
-│   │   │   ├── pricing.py       # Provider model pricing tables
-│   │   │   └── tracker.py       # Usage & cost aggregation
-│   │   │
-│   │   ├── monitoring/          # System monitoring
-│   │   │   ├── __init__.py
-│   │   │   ├── metrics.py       # Prometheus metrics
-│   │   │   └── health.py        # Health check endpoints
 │   │   │
 │   │   ├── views/               # ★ API Endpoints
 │   │   │   ├── __init__.py      # Exports for easy importing
@@ -171,12 +123,11 @@ document_intelligent_system/
 │   │   │   │                    #   - register
 │   │   │   │                    #   - refresh token
 │   │   │   ├── doc_api.py       # Document CRUD
-│   │   │   │                    #   - list documents (paginated)
+│   │   │   │                    #   - list documents
 │   │   │   │                    #   - upload document
-│   │   │   │                    #   - upload batch (up to 1000 files)
 │   │   │   │                    #   - delete document
 │   │   │   ├── doc_indexing.py  # Document Indexing
-│   │   │   │                    #   - index documents (RQ/ThreadPool job queue)
+│   │   │   │                    #   - index documents
 │   │   │   │                    #   - classify by department
 │   │   │   ├── documents.py     # Additional document ops
 │   │   │   ├── rag.py           # ★ Chat & RAG Endpoints
@@ -185,13 +136,13 @@ document_intelligent_system/
 │   │   │   │                    #   - PUT /chat/sessions/{id}
 │   │   │   │                    #   - DELETE /chat/sessions/{id}
 │   │   │   │                    #   - GET messages
-│   │   │   │                    #   - POST /chat/query (with fallback, cost tracking)
+│   │   │   │                    #   - POST /chat/query
 │   │   │   ├── rag_query.py     # Query-specific logic
 │   │   │   ├── admin.py         # Admin Operations
 │   │   │   │                    #   - delete documents
 │   │   │   │                    #   - system management
 │   │   │   ├── admin_graph.py   # Admin Analytics
-│   │   │   ├── admin_llm.py     # Admin LLM Config (masked keys)
+│   │   │   ├── admin_llm.py     # Admin LLM Config
 │   │   │   ├── admin_metrics.py # System Metrics
 │   │   │   └── admin_users.py   # User Management
 │   │   │
@@ -201,8 +152,7 @@ document_intelligent_system/
 │   │   │   ├── 0002_document_classification_...
 │   │   │   ├── 0003_userinvitation_document_...
 │   │   │   ├── 0004_passwordresetotp.py
-│   │   │   ├── 0005_llmconfig.py
-│   │   │   └── 0006_chatmessage_cache_hit_...
+│   │   │   └── 0005_llmconfig.py
 │   │   │
 │   │   └── __pycache__/         # Python bytecode cache
 │   │
@@ -236,9 +186,8 @@ document_intelligent_system/
 │   │   │   │                    #   - Department filter
 │   │   │   │                    #   - Session CRUD (3-dot menu)
 │   │   │   │                    #   - RAG pipeline visualizer
-│   │   │   │                    #   - Cost/model/metrics display
 │   │   │   ├── DocumentsPage.jsx # Document Management
-│   │   │   ├── SettingsPage.jsx  # Settings (admin-managed, model tiers info)
+│   │   │   ├── SettingsPage.jsx  # Settings & Configuration
 │   │   │   ├── AdminAnalytics.jsx # Admin Dashboard
 │   │   │   ├── AdminMetrics.jsx   # Metrics & Analytics
 │   │   │   └── ...
@@ -252,10 +201,6 @@ document_intelligent_system/
 │   │   │   │                    #   - Step visualization
 │   │   │   │                    #   - Source highlighting
 │   │   │   │                    #   - Step tracking
-│   │   │   │                    #   - Cost/latency/cache metrics
-│   │   │   ├── LandingPage.jsx  # Welcome/landing page with feature showcase
-│   │   │   ├── ErrorBoundary.jsx # React error boundary
-│   │   │   ├── Toast.jsx        # Toast notification system
 │   │   │   ├── LoginScreen.jsx  # Authentication
 │   │   │   ├── Navbar.jsx       # Navigation
 │   │   │   ├── Sidebar.jsx      # Sidebar Navigation
@@ -263,15 +208,12 @@ document_intelligent_system/
 │   │   │   │   ├── AdminAnalytics.jsx
 │   │   │   │   ├── AdminUsers.jsx
 │   │   │   │   └── AdminSettings.jsx
-│   │   │   ├── Icons.jsx        # ★ SVG Icon Library (replaced emoji)
-│   │   │   │                    #   - 40+ SVG icon components
-│   │   │   │                    #   - ChatIcon, GlobeIcon, SearchIcon, etc.
+│   │   │   ├── Icons.jsx        # Icon Components
 │   │   │   ├── KnowledgeGraphVisualizer.jsx
 │   │   │   └── ...
 │   │   │
 │   │   ├── utils/               # Utility Functions
-│   │   │   ├── api.js           # API client functions (uses safeLocalStorage)
-│   │   │   ├── constants.js     # Shared constants (API_BASE, provider models, tiers)
+│   │   │   ├── api.js           # API client functions
 │   │   │   ├── auth.js          # Authentication helpers
 │   │   │   ├── formatters.js    # Date/time formatting
 │   │   │   └── ...
@@ -324,19 +266,15 @@ Permission Check (IsViewerOrAbove)
     ↓
 run_rag_pipeline() [app/rag_graph.py]
     ├─ retrieval step
-    │  └─ Hybrid Search (Dense + BM25 via RRF)
-    ├─ reranking step
-    │  └─ Relevance Score & Threshold Filtering
-    ├─ context_assembly step
-    │  └─ Token-budget-aware Context Building
+    │  └─ Vector Store Search (Chroma)
+    ├─ processing step
+    │  └─ Context Formatting
     ├─ llm_generation step
-    │  └─ LLM API Call (with fallback)
-    ├─ evaluation step
-    │  └─ Heuristic Scoring + LLM Judge
-    └─ caching step
-       └─ Semantic Cache (RBAC-aware)
+    │  └─ LLM API Call (llm_helper.py)
+    └─ formatting step
+       └─ Response Formatting
     ↓
-Return Response with steps, sources, cost, & metrics
+Return Response with steps & sources
     ↓
 Frontend Updates State
     ├─ Set messages
@@ -480,12 +418,6 @@ ChatMessage Table
 ├─ content
 ├─ steps (JSON) [for RAG tracking]
 ├─ sources (JSON) [cited documents]
-├─ model_used (varchar) [LLM model name]
-├─ input_tokens (int)
-├─ output_tokens (int)
-├─ estimated_cost_usd (float)
-├─ latency_ms (float)
-├─ cache_hit (boolean)
 └─ created_at
 
 LLMConfig Table
@@ -518,9 +450,8 @@ REST Endpoints:
 └─ POST   query          # Send chat query
 
 /api/documents/
-├─ GET    .              # List documents (paginated with limit/offset)
+├─ GET    .              # List documents
 ├─ POST   upload         # Upload document
-├─ POST   upload/batch   # Batch upload (up to 1000 files)
 ├─ GET    {id}           # Get document
 ├─ DELETE {id}           # Delete document
 └─ GET    search         # Search documents
@@ -529,14 +460,7 @@ REST Endpoints:
 ├─ GET    metrics        # System metrics
 ├─ DELETE documents/{id} # Force delete
 ├─ GET    users          # Manage users
-└─ POST   llm/config     # Configure LLM (encrypted keys)
-
-/api/health/
-├─ GET    live           # Liveness probe
-└─ GET    ready          # Readiness probe
-
-/api/cache/
-└─ GET    stats          # Cache statistics
+└─ POST   llm/config     # Configure LLM
 ```
 
 ## 🎯 Key Design Patterns

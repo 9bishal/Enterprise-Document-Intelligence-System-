@@ -211,20 +211,6 @@ document_intelligent_system/
 - ✅ Key files
 - ✅ Database schema overview
 
-### backend/README.md Features:
-- ✅ Backend structure
-- ✅ RAG pipeline, LLM helper, vector store docs
-- ✅ API endpoint tables
-- ✅ Dependencies overview
-- ✅ Setup & configuration
-
-### frontend/README.md Features:
-- ✅ Frontend structure
-- ✅ Component descriptions
-- ✅ Design system tokens
-- ✅ State management
-- ✅ Development & build commands
-
 ### CONTRIBUTING.md Features:
 - ✅ Code style guide
 - ✅ Git workflow
@@ -302,17 +288,15 @@ document_intelligent_system/
 
 | File | Lines | Focus | Audience |
 |------|-------|-------|----------|
-| README.md | ~400 | Overview | Everyone |
+| README.md | ~300 | Overview | Everyone |
 | QUICKSTART.md | ~400 | Setup | Developers |
-| HLD.md | ~850 | Architecture | Architects/Leads |
-| LLD.md | ~1250 | Implementation | Developers/QA |
-| PROJECT_STRUCTURE.md | ~250 | Organization | Developers |
+| HLD.md | ~800 | Architecture | Architects/Leads |
+| LLD.md | ~1200 | Implementation | Developers/QA |
+| PROJECT_STRUCTURE.md | ~200 | Organization | Developers |
 | CONTRIBUTING.md | ~200 | Process | Contributors |
-| backend/README.md | ~550 | Backend | Backend Developers |
-| frontend/README.md | ~150 | Frontend | Frontend Developers |
 | .gitignore | ~50 | VCS | Automation |
 
-**Total Documentation**: ~4,100 lines
+**Total Documentation**: ~3,250 lines
 
 ---
 
@@ -386,8 +370,6 @@ When you make code changes:
 - QUICKSTART.md: Bi-monthly
 - PROJECT_STRUCTURE.md: As needed
 - CONTRIBUTING.md: Annually
-- backend/README.md: With each backend update
-- frontend/README.md: With each frontend update
 
 ---
 
@@ -436,6 +418,6 @@ Expert:
 
 ---
 
-**Last Updated**: July 2026
-**Documentation Version**: 2.0
+**Last Updated**: May 2026
+**Documentation Version**: 1.0
 **Status**: Complete and Production Ready

@@ -43,13 +43,17 @@ function parseMarkdown(text, onCitationClick) {
 }
 
 function costBadgeHTML(msg) {
-  if (msg.role !== 'assistant' || !msg.estimated_cost_usd) return '';
-  const cost = parseFloat(msg.estimated_cost_usd).toFixed(6);
+  if (msg.role !== 'assistant' || !msg.model_used) return '';
+  const cost = parseFloat(msg.estimated_cost_usd || 0).toFixed(6);
   const model = msg.model_used || '—';
   const latency = msg.latency_ms || '—';
-  const cacheHit = msg.cache_hit ? 'Yes' : 'No';
-  return `<div class="msg-cost-badge"><svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg> $${cost} &nbsp;|&nbsp; <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> ${latency}ms &nbsp;|&nbsp; <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg> Cache: ${cacheHit} &nbsp;|&nbsp; <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"/><rect x="9" y="9" width="6" height="6"/></svg> ${model}</div>`;
+  const isCache = !!msg.cache_hit;
+  const cachePill = isCache
+    ? `<span style="background:rgba(34,197,94,0.18);color:#4ade80;border:1px solid rgba(74,222,128,0.35);border-radius:999px;padding:1px 7px;font-weight:700;letter-spacing:0.03em;">⚡ Cache: HIT</span>`
+    : `<span style="background:rgba(148,163,184,0.10);color:#94a3b8;border:1px solid rgba(148,163,184,0.2);border-radius:999px;padding:1px 7px;">Cache: No</span>`;
+  return `<div class="msg-cost-badge"><svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg> $${cost} &nbsp;|&nbsp; <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> ${latency}ms &nbsp;|&nbsp; ${cachePill} &nbsp;|&nbsp; <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"/><rect x="9" y="9" width="6" height="6"/></svg> ${model}</div>`;
 }
+
 
 export default function ChatWindow({
   messages,
@@ -154,7 +158,7 @@ export default function ChatWindow({
                 dangerouslySetInnerHTML={{ __html: parseMarkdown(msg.content) }}
               />
               
-              {msg.role === 'assistant' && msg.estimated_cost_usd && (
+              {msg.role === 'assistant' && msg.model_used && (
                 <div
                   className="msg-cost-badge"
                   dangerouslySetInnerHTML={{ __html: costBadgeHTML(msg) }}

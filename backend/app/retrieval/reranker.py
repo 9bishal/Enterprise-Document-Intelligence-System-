@@ -35,9 +35,9 @@ def rerank(query: str, candidates: list[dict], top_k: int = 4) -> list[dict]:
         key = _rerank_cache_key(query, candidates)
         cached = _rerank_cache.get(key)
         if cached is not None:
-            ranked = cached.get("ranked")
-            if ranked is not None:
-                return ranked[:top_k]
+            if isinstance(cached, dict) and "ranked" in cached:
+                return cached["ranked"][:top_k]
+            return cached[:top_k]
     pairs = [(query, c["text"]) for c in candidates]
     try:
         scores = _model().predict(pairs)

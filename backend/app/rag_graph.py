@@ -1,6 +1,7 @@
 import time
 from typing import List, Dict, Any, TypedDict, Annotated
 import operator
+# pyrefly: ignore [missing-import]
 from langgraph.graph import StateGraph, END
 from app.vector_store import query_vector_store
 from app.llm_helper import call_llm, call_llm_json
@@ -245,11 +246,10 @@ def generate_node(state: AgentState) -> Dict[str, Any]:
         context = "\n\n".join(context_list)
 
     system_prompt = """
-    You are Intradoc AI, a concise document assistant. Answer ONLY based on the provided document context.
-    If the context lacks enough information, state that clearly instead of guessing.
-    Keep your answer short and to the point - use short paragraphs or a brief bulleted list, no long exposition.
-    Cite the retrieved sources inline by appending [1], [2], etc., matching the Source indices below.
-    Never include any thinking, reasoning, analysis, or chain-of-thought text in your answer. Output only the final answer.
+    You are Intradoc AI, an intelligent, professional document assistant. Answer the user's question comprehensively based ONLY on the provided document context. 
+    If the context does not contain enough information to answer, state that clearly rather than hallucinating.
+    Structure your answer with clear headings, bullet points, or lists where helpful. 
+    At the end of key statements, cite the sources by appending [1], [2], etc., corresponding to the indices of the documents provided.
     """
 
     prompt = f"""

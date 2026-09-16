@@ -1,4 +1,3 @@
-import os
 import uuid
 import json
 
@@ -12,20 +11,6 @@ from django_backend.models import Document, ChatSession, ChatMessage, LLMConfig
 from django_backend.permissions import IsViewerOrAbove
 from django_backend.serializers import ChatSessionSerializer, ChatMessageSerializer
 from app.rag_graph import run_rag_pipeline
-
-API_KEY_PREFIXES = {
-    "groq": "gsk_",
-    "gemini": "AIza",
-    "openai": "sk-",
-}
-
-def _valid_key(provider: str, key: str) -> bool:
-    if not key:
-        return False
-    prefix = API_KEY_PREFIXES.get(provider)
-    if prefix and key.startswith(prefix):
-        return True
-    return False
 
 @api_view(['GET', 'POST'])
 @permission_classes([IsViewerOrAbove])
@@ -125,34 +110,39 @@ def query_rag(request):
         user_docs = Document.objects.filter(department=user_department, status="indexed")
     user_doc_ids = [str(d.id) for d in user_docs]
 
-    # Check Global Settings Enforcements
+    # Always load admin-saved API keys from the database as the
+    # authoritative source.  Users never supply their own keys.
     llm_config = LLMConfig.objects.first()
-    if llm_config and llm_config.enforce_globally:
+    if llm_config:
         api_keys = {
-            "groq": llm_config.get_groq_key() if _valid_key("groq", llm_config.get_groq_key()) else "",
-            "gemini": llm_config.get_gemini_key() if _valid_key("gemini", llm_config.get_gemini_key()) else "",
-            "openai": llm_config.get_openai_key() if _valid_key("openai", llm_config.get_openai_key()) else "",
+            "gemini": llm_config.get_gemini_key(),
+            "openai": llm_config.get_openai_key(),
+            "groq": llm_config.get_groq_key()
         }
-        p = llm_config.provider
-        model_config = {
-            "provider": p,
-            "model": llm_config.model,
-            "temperature": llm_config.temperature,
-            "k": llm_config.k,
-            "fallback_provider": "groq" if p != "groq" else "gemini",
-            "fallback_model": "llama-3.3-70b-versatile" if p != "groq" else "gemini-1.5-flash",
-            "max_context_tokens": 3000,
-        }
+        if llm_config.enforce_globally:
+            # Admin enforced: use DB config entirely, ignore frontend payload
+            model_config = {
+                "provider": llm_config.provider,
+                "model": llm_config.model,
+                "temperature": llm_config.temperature,
+                "k": llm_config.k
+            }
+        else:
+            # Not enforced: use admin DB config as defaults, allow user
+            # overrides for provider/model/temperature/k only
+            model_config = {
+                "provider": config_payload.get("provider", llm_config.provider),
+                "model": config_payload.get("model", llm_config.model),
+                "temperature": config_payload.get("temperature", llm_config.temperature),
+                "k": config_payload.get("k", llm_config.k)
+            }
     else:
-        p = config_payload.get("provider", "groq")
+        # No LLMConfig exists at all — use frontend payload with safe defaults
         model_config = {
-            "provider": p,
-            "model": config_payload.get("model", "llama-3.3-70b-versatile" if p == "groq" else "gemini-1.5-flash"),
+            "provider": config_payload.get("provider", "groq"),
+            "model": config_payload.get("model", "groq/compound-mini"),
             "temperature": config_payload.get("temperature", 0.3),
-            "k": config_payload.get("k", 4),
-            "fallback_provider": "groq" if p != "groq" else "gemini",
-            "fallback_model": "llama-3.3-70b-versatile" if p != "groq" else "gemini-1.5-flash",
-            "max_context_tokens": 3000,
+            "k": config_payload.get("k", 4)
         }
 
     # 4. Execute the stateful LangGraph pipeline with department scoping

@@ -3,17 +3,30 @@ import time
 from typing import Optional
 
 from redisvl.extensions.cache.llm import SemanticCache
-from redisvl.utils.vectorize import HFTextVectorizer
 
 from .config import CACHE_SPECS, REDIS_URL, SEMANTIC_SIMILARITY_THRESHOLD, CacheType
 from .metrics import CACHE_HITS, CACHE_LATENCY, CACHE_MISSES, CACHE_SET_TOTAL
 
 EMBEDDING_MODEL_NAME = os.getenv("INTRADOC_EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
 
+def _shared_vectorizer():
+    """Reuse the single embedding model from app.vector_store so we never load
+    a second copy of the model in the same process (avoids OOM crashes)."""
+    from app.vector_store import embeddings_model as _shared_model
+
+    class _SharedVectorizer:
+        def embed(self, text, **kwargs):
+            return _shared_model.embed_query(text)
+
+        def embed_many(self, texts, **kwargs):
+            return _shared_model.embed_documents(texts)
+
+    return _SharedVectorizer()
+
 def _build_backend():
     ttl = CACHE_SPECS[CacheType.SEMANTIC_RESPONSE].ttl_seconds or None
     distance_threshold = round(1 - SEMANTIC_SIMILARITY_THRESHOLD, 4)
-    vectorizer = HFTextVectorizer(model=EMBEDDING_MODEL_NAME)
+    vectorizer = _shared_vectorizer()
     return SemanticCache(
         name="intradoc_semantic_cache",
         redis_url=REDIS_URL,

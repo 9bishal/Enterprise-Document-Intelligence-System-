@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../utils/api';
-import { SparklesIcon, BarChartIcon, UsersIcon, NetworkIcon, SettingsIcon } from './Icons';
+import { SparklesIcon, BarChartIcon, UsersIcon, NetworkIcon, SettingsIcon, ChatIcon } from './Icons';
 import { safeLocalStorage } from '../utils/constants';
 const storage = safeLocalStorage();
 import AdminAnalytics from './admin/AdminAnalytics';
@@ -78,7 +78,7 @@ export default function AdminDashboard({
         {/* Branding */}
         <div className="admin-nav-header">
           <div className="logo-icon">
-            <SparklesIcon style={{ width: 16, height: 16, color: '#030712' }} />
+            <SparklesIcon style={{ width: 16, height: 16, color: '#111111' }} />
           </div>
           <div>
             <h1 className="logo-text" style={{ fontSize: 17 }}>Intradoc AI</h1>
@@ -105,7 +105,7 @@ export default function AdminDashboard({
           onClick={() => navigate('/query')}
           title="Go to Chat & Query Interface"
         >
-          <SparklesIcon style={{ width: 14, height: 14, color: '#030712' }} /> RAG Workspace
+          <span><ChatIcon style={{ width: 16, height: 16, verticalAlign: 'middle', marginRight: 6 }} /></span> RAG Workspace
         </button>
 
           {/* Spacer */}

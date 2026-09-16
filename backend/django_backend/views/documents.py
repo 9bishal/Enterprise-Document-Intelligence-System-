@@ -55,11 +55,16 @@ def analyze_document_classification_and_risks(filepath):
         }}
         """
         
-        from app.llm_helper import call_llm_json
+        from app.llm_helper import call_llm_json, resolve_llm_config
+        llm_cfg = resolve_llm_config()
+        if not llm_cfg:
+            return "General", "Clean", ""
         res = call_llm_json(
             prompt=prompt,
             system_prompt="You are a precise corporate security compliance assistant. Return valid JSON only.",
-            provider="gemini", # default to gemini
+            provider=llm_cfg["provider"],
+            api_key=llm_cfg["api_key"],
+            model_name=llm_cfg["model"],
             temperature=0.0
         )
         

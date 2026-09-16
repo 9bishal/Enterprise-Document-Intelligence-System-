@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { SparklesIcon, SearchIcon, UploadIcon, CpuIcon, LockIcon, FlashIcon, BarChartIcon } from './Icons';
+import { SparklesIcon, SearchIcon, UploadIcon, CpuIcon, LockIcon, ZapIcon, BarChartIcon } from './Icons';
 
 const FEATURES = [
   {
@@ -24,7 +24,7 @@ const FEATURES = [
     desc: 'Admins manage users, departments, and document access. Viewers, Editors, and Admins each have appropriate permissions for a secure enterprise workspace.',
   },
   {
-    icon: FlashIcon,
+    icon: ZapIcon,
     title: 'Multi-Provider LLM Support',
     desc: 'Choose from Groq, Gemini, OpenAI, or Ollama. Configure models, temperature, and retrieval parameters. Admins can enforce global settings across the organization.',
   },
@@ -60,7 +60,7 @@ export default function LandingPage() {
       <header className="landing-nav">
         <div className="landing-nav-inner">
           <div className="landing-logo">
-            <SparklesIcon style={{ width: 22, height: 22, color: '#030712' }} />
+            <SparklesIcon style={{ width: 22, height: 22, color: '#111111' }} />
             <span className="landing-logo-text">Intradoc AI</span>
           </div>
           <div className="landing-nav-links">
@@ -105,7 +105,7 @@ export default function LandingPage() {
           <div className="landing-features-grid">
             {FEATURES.map((f, i) => (
               <div key={i} className="landing-feature-card">
-                <div className="landing-feature-icon">{React.createElement(f.icon, { style: { width: 24, height: 24 } })}</div>
+                <div className="landing-feature-icon">{React.createElement(f.icon, { width: 26, height: 26 })}</div>
                 <h3 className="landing-feature-title">{f.title}</h3>
                 <p className="landing-feature-desc">{f.desc}</p>
               </div>

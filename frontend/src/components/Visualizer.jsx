@@ -158,8 +158,8 @@ export default function Visualizer({
           <div className="sources-list">
             {isCacheHit ? (
               <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
-                <CacheIcon style={{ width: 28, height: 28, marginBottom: 12, opacity: 0.4, color: '#2d6a4f' }} />
-                <p style={{ fontWeight: 600, color: '#2d6a4f', marginBottom: 4 }}>Response served from semantic cache</p>
+                <CacheIcon style={{ width: 28, height: 28, marginBottom: 12, opacity: 0.4, color: '#111111' }} />
+                <p style={{ fontWeight: 600, color: '#111111', marginBottom: 4 }}>Response served from semantic cache</p>
                 <p style={{ fontSize: '11px' }}>No retrieval performed — identical or semantically similar question was answered before.</p>
               </div>
             ) : safeSources.length > 0 ? (
@@ -214,14 +214,14 @@ export default function Visualizer({
                         alignItems: 'center',
                         gap: 8,
                         padding: '8px 10px',
-                        background: isCacheRow && isCacheHit ? 'rgba(45, 106, 79, 0.08)' : isCacheRow && !isCacheHit ? 'rgba(20, 20, 19, 0.02)' : 'rgba(36, 50, 82, 0.04)',
+                        background: isCacheRow && isCacheHit ? 'rgba(17, 17, 17, 0.08)' : isCacheRow && !isCacheHit ? 'rgba(0, 0, 0, 0.02)' : 'rgba(0, 0, 0, 0.04)',
                         borderRadius: '8px',
                         fontSize: '12px'
                       }}>
-                        <Icon style={{ width: 14, height: 14, color: isCacheRow && isCacheHit ? '#2d6a4f' : 'var(--primary)', flexShrink: 0 }} />
+                        <Icon style={{ width: 14, height: 14, color: isCacheRow && isCacheHit ? '#111111' : 'var(--primary)', flexShrink: 0 }} />
                         <div style={{ display: 'flex', flexDirection: 'column' }}>
                           <span style={{ color: 'var(--text-muted)', fontSize: '10px', fontWeight: 500 }}>{item.label}</span>
-                          <span style={{ fontWeight: 600, color: isCacheRow && isCacheHit ? '#2d6a4f' : isCostRow && Number(messageCost) === 0 ? '#2d6a4f' : 'var(--text-primary)' }}>{item.value}</span>
+                          <span style={{ fontWeight: 600, color: isCacheRow && isCacheHit ? '#111111' : isCostRow && Number(messageCost) === 0 ? '#111111' : 'var(--text-primary)' }}>{item.value}</span>
                         </div>
                       </div>
                     );
@@ -229,14 +229,14 @@ export default function Visualizer({
                 </div>
 
                 {isCacheHit && (
-                  <div style={{ marginTop: 16, padding: '10px 14px', background: 'rgba(45, 106, 79, 0.06)', border: '1px solid rgba(45, 106, 79, 0.15)', borderRadius: 10, fontSize: '12px', color: '#2d6a4f' }}>
+                  <div style={{ marginTop: 16, padding: '10px 14px', background: 'rgba(17, 17, 17, 0.06)', border: '1px solid rgba(0, 0, 0, 0.15)', borderRadius: 10, fontSize: '12px', color: '#111111' }}>
                     <strong style={{ display: 'block', marginBottom: 4 }}>Cache Savings</strong>
                     This response was served from the semantic cache — no LLM inference cost, no retrieval latency. Estimated savings: <strong>${messageCost > 0 ? messageCost.toFixed(6) : '0.000254'}</strong> per query.
                   </div>
                 )}
 
                 {messageModel === 'error' && (
-                  <div style={{ marginTop: 16, padding: '10px 14px', background: 'rgba(220, 38, 38, 0.06)', border: '1px solid rgba(220, 38, 38, 0.15)', borderRadius: 10, fontSize: '12px', color: '#c0392b' }}>
+                  <div style={{ marginTop: 16, padding: '10px 14px', background: 'rgba(220, 38, 38, 0.06)', border: '1px solid rgba(220, 38, 38, 0.15)', borderRadius: 10, fontSize: '12px', color: '#dc2626' }}>
                     <strong>Pipeline Error</strong><br />
                     The RAG pipeline encountered an error. Check that your API key is valid and the backend server is running.
                   </div>
@@ -247,21 +247,21 @@ export default function Visualizer({
                     <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>Evaluation Metrics</h4>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                       {evalData.relevance_score !== undefined && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', background: 'rgba(36, 50, 82, 0.03)', borderRadius: '6px', fontSize: '12px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', background: 'rgba(0, 0, 0, 0.03)', borderRadius: '6px', fontSize: '12px' }}>
                           <span style={{ color: 'var(--text-muted)' }}>Relevance</span>
                           <span style={{ fontWeight: 600 }}>{evalData.relevance_score.toFixed(1)}/10</span>
                         </div>
                       )}
                       {evalData.groundedness_score !== undefined && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', background: 'rgba(36, 50, 82, 0.03)', borderRadius: '6px', fontSize: '12px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', background: 'rgba(0, 0, 0, 0.03)', borderRadius: '6px', fontSize: '12px' }}>
                           <span style={{ color: 'var(--text-muted)' }}>Groundedness</span>
                           <span style={{ fontWeight: 600 }}>{evalData.groundedness_score.toFixed(1)}/10</span>
                         </div>
                       )}
                       {evalData.overall_score !== undefined && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', background: 'rgba(36, 50, 82, 0.03)', borderRadius: '6px', fontSize: '12px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', background: 'rgba(0, 0, 0, 0.03)', borderRadius: '6px', fontSize: '12px' }}>
                           <span style={{ color: 'var(--text-muted)' }}>Overall</span>
-                          <span style={{ fontWeight: 600, color: evalData.overall_score >= 7 ? '#2d6a4f' : '#c0392b' }}>{evalData.overall_score.toFixed(1)}/10</span>
+                          <span style={{ fontWeight: 600, color: evalData.overall_score >= 7 ? '#15803d' : '#dc2626' }}>{evalData.overall_score.toFixed(1)}/10</span>
                         </div>
                       )}
                     </div>

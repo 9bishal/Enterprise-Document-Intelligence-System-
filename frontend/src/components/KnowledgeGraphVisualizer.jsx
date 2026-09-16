@@ -9,7 +9,7 @@ export default function KnowledgeGraphVisualizer({ data }) {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        color: '#8E8B82',
+        color: '#9ca3af',
         fontSize: '14px'
       }}>
         No data to map
@@ -24,11 +24,11 @@ export default function KnowledgeGraphVisualizer({ data }) {
   const radius = 180; // Distance of departments from center
 
   const colors = {
-    'HR': '#E05E3F',
-    'Legal': '#6366F1',
-    'Finance': '#059669',
-    'Technical': '#D97706',
-    'General': '#8E8B82'
+    'HR': '#111111',
+    'Legal': '#374151',
+    'Finance': '#6b7280',
+    'Technical': '#9ca3af',
+    'General': '#d1d5db'
   };
 
   // Position departments in a circle
@@ -38,7 +38,7 @@ export default function KnowledgeGraphVisualizer({ data }) {
       ...dept,
       x: centerX + radius * Math.cos(angle),
       y: centerY + radius * Math.sin(angle),
-      color: colors[dept.name] || '#8E8B82'
+      color: colors[dept.name] || '#9ca3af'
     };
   });
 
@@ -59,7 +59,7 @@ export default function KnowledgeGraphVisualizer({ data }) {
       deptY: dept.y,
       x: dept.x + docRadius * Math.cos(sibAngle),
       y: dept.y + docRadius * Math.sin(sibAngle),
-      color: colors[doc.department] || '#8E8B82'
+      color: colors[doc.department] || '#9ca3af'
     };
   }).filter(Boolean);
 
@@ -67,7 +67,7 @@ export default function KnowledgeGraphVisualizer({ data }) {
     <svg width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet">
       {/* Background Grid */}
       <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-        <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(20, 20, 19, 0.03)" strokeWidth="1"/>
+        <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(0, 0, 0, 0.03)" strokeWidth="1"/>
       </pattern>
       <rect width="100%" height="100%" fill="url(#grid)" />
 
@@ -77,7 +77,7 @@ export default function KnowledgeGraphVisualizer({ data }) {
           key={`link-org-${dept.name}`}
           x1={centerX} y1={centerY} 
           x2={dept.x} y2={dept.y} 
-          stroke="rgba(20, 20, 19, 0.15)" 
+          stroke="rgba(0, 0, 0, 0.15)" 
           strokeWidth="2" 
           strokeDasharray="4 4"
         />
@@ -103,7 +103,7 @@ export default function KnowledgeGraphVisualizer({ data }) {
           {doc.risk_status === 'Risk Detected' && (
             <circle cx={doc.x} cy={doc.y} r={12} fill="none" stroke="#DC2626" strokeWidth="2" strokeDasharray="2 2" />
           )}
-          <text x={doc.x} y={doc.y + 14} fontSize="9" fill="#5C5A55" textAnchor="middle">
+          <text x={doc.x} y={doc.y + 14} fontSize="9" fill="#525252" textAnchor="middle">
             {doc.filename.substring(0, 10)}...
           </text>
         </g>
@@ -112,11 +112,11 @@ export default function KnowledgeGraphVisualizer({ data }) {
       {/* Department Nodes */}
       {deptNodes.map(dept => (
         <g key={`node-dept-${dept.name}`}>
-          <circle cx={dept.x} cy={dept.y} r={28} fill="#141413" />
-          <text x={dept.x} y={dept.y + 4} fontSize="12" fontWeight="bold" fill="#FAF9F5" textAnchor="middle">
+          <circle cx={dept.x} cy={dept.y} r={28} fill="#111111" />
+          <text x={dept.x} y={dept.y + 4} fontSize="12" fontWeight="bold" fill="#ffffff" textAnchor="middle">
             {dept.name}
           </text>
-          <text x={dept.x} y={dept.y + 42} fontSize="11" fontWeight="600" fill="#141413" textAnchor="middle">
+          <text x={dept.x} y={dept.y + 42} fontSize="11" fontWeight="600" fill="#111111" textAnchor="middle">
             {dept.document_count} docs
           </text>
         </g>
@@ -124,9 +124,9 @@ export default function KnowledgeGraphVisualizer({ data }) {
 
       {/* Center Organization Node */}
       <g>
-        <circle cx={centerX} cy={centerY} r={36} fill="#E05E3F" />
-        <circle cx={centerX} cy={centerY} r={42} fill="none" stroke="#E05E3F" strokeWidth="1" strokeOpacity="0.5" />
-        <text x={centerX} y={centerY + 5} fontSize="14" fontWeight="bold" fill="#FAF9F5" textAnchor="middle">
+        <circle cx={centerX} cy={centerY} r={36} fill="#111111" />
+        <circle cx={centerX} cy={centerY} r={42} fill="none" stroke="#111111" strokeWidth="1" strokeOpacity="0.5" />
+        <text x={centerX} y={centerY + 5} fontSize="14" fontWeight="bold" fill="#ffffff" textAnchor="middle">
           Intradoc
         </text>
       </g>

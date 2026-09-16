@@ -23,9 +23,11 @@ _llm_cache = {}
 _llm_metrics = {}
 
 class CachedString(str):
+    """String subclass to mark cached responses."""
     is_cached: bool = False
 
 def _init_llm_cache():
+    """Lazy init of prompt cache and Prometheus metrics - avoids import errors if optional deps missing."""
     global _cache_enabled, _llm_cache, _llm_metrics
     if _cache_enabled:
         return
@@ -43,8 +45,11 @@ def _init_llm_cache():
         _cache_enabled = False
 
 def resolve_llm_config():
-    """Return the effective (provider, model, api_key) from the admin-saved
-    global LLMConfig, or None when no provider has a usable API key."""
+    """
+    Return the effective (provider, model, api_key) from the admin-saved
+    global LLMConfig, or None when no provider has a usable API key.
+    Fallback chain: configured provider -> Groq -> Gemini -> OpenAI -> env vars.
+    """
     try:
         from django_backend.models import LLMConfig
         cfg = LLMConfig.objects.first()
@@ -61,6 +66,7 @@ def resolve_llm_config():
         "openai": cfg.get_openai_key(),
     }
 
+    # Priority order: configured provider first, then fallbacks
     candidates = [
         (configured_provider, cfg.model, key_map.get(configured_provider, "")),
         ("groq", cfg.model, key_map["groq"]),
@@ -107,6 +113,7 @@ def call_llm(
 ) -> str:
     """
     Universal LLM API Caller supporting Gemini, OpenAI, Groq, and Ollama.
+    Handles prompt caching, token counting, cost estimation, and latency metrics.
     """
     provider = provider.lower()
     _init_llm_cache()
@@ -114,7 +121,7 @@ def call_llm(
     ct = _llm_metrics.get("count_tokens", lambda x: len(x)//4) if _cache_enabled else (lambda x: 0)
     input_tokens = ct(prompt + system_prompt) if _cache_enabled else 0
 
-    # 1. Check prompt cache
+    # 1. Check prompt cache - returns CachedString with is_cached=True if hit
     if _cache_enabled:
         cached = _llm_cache["prompt"].get_rendered("llm_response", cache_key_vars)
         if cached is not None:
@@ -125,7 +132,7 @@ def call_llm(
 
     start_time = time.time()
 
-    # 1. Google Gemini
+    # 1. Google Gemini - uses google.generativeai SDK
     if provider == "gemini":
         try:
             key = (
@@ -250,8 +257,11 @@ def call_llm_with_fallback(
     fallback_model: str = "",
     temperature: float = 0.2,
 ) -> tuple[str, str, bool]:
-    """Try primary model; on failure fall back to a different provider/model.
-    Returns (response_text, model_used, cache_hit)."""
+    """
+    Try primary model; on failure fall back to a different provider/model.
+    Returns (response_text, model_used, cache_hit).
+    Fallback models chosen for free-tier reliability (e.g., allam-2-7b for Groq).
+    """
     model_used = primary_model or f"{provider}_fast"
     result = call_llm(
         prompt=prompt,
@@ -262,13 +272,15 @@ def call_llm_with_fallback(
         temperature=temperature,
     )
     is_cached = getattr(result, 'is_cached', False)
+    # Success: no error prefix in response
     if not result.startswith("Error") and not result.startswith("HTTP Error"):
         return str(result), model_used, is_cached
 
     fp = fallback_provider
     if not fp:
         return str(result), model_used, False
-    fm = fallback_model or {"groq": "llama-3.3-70b-versatile", "gemini": "gemini-1.5-flash", "openai": "gpt-4o-mini"}.get(fp, "")
+    # Default fallback models per provider - chosen for free-tier reliability
+    fm = fallback_model or {"groq": "allam-2-7b", "gemini": "gemini-1.5-flash", "openai": "gpt-4o-mini"}.get(fp, "")
     model_used = fm
     print(f"Primary LLM failed, falling back to {fp}/{fm}: {result[:100]}")
     result = call_llm(
