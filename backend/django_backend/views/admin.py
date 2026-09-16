@@ -50,11 +50,7 @@ def get_admin_llm_config(request):
             "temperature": config.temperature,
             "k": config.k
         },
-        "api_keys": {
-            "groq": config.groq_api_key,
-            "gemini": config.gemini_api_key,
-            "openai": config.openai_api_key
-        }
+        "api_keys": config.masked_keys()
     })
 
 @api_view(['PUT'])
@@ -74,9 +70,12 @@ def update_admin_llm_config(request):
     if 'k' in cfg: config.k = cfg['k']
     
     keys = data.get("api_keys", {})
-    if "groq" in keys: config.groq_api_key = keys["groq"]
-    if "gemini" in keys: config.gemini_api_key = keys["gemini"]
-    if "openai" in keys: config.openai_api_key = keys["openai"]
+    if "groq" in keys and "*" not in keys["groq"]:
+        config.set_groq_key(keys["groq"])
+    if "gemini" in keys and "*" not in keys["gemini"]:
+        config.set_gemini_key(keys["gemini"])
+    if "openai" in keys and "*" not in keys["openai"]:
+        config.set_openai_key(keys["openai"])
         
     config.save()
     
@@ -96,12 +95,17 @@ def admin_metrics(request):
     
     # User lists with role and department
     users_list = []
+    profiles_map = {}
+    for p in UserProfile.objects.select_related('user').all():
+        profiles_map[p.user_id] = p
     for u in User.objects.all():
-        profile, _ = UserProfile.objects.get_or_create(user=u, defaults={'role': 'Viewer', 'department': 'General'})
+        profile = profiles_map.get(u.id)
+        role = profile.role if profile else 'Viewer'
+        dept = profile.department if profile else 'General'
         users_list.append({
             "username": u.username,
-            "role": profile.role,
-            "department": profile.department,
+            "role": role,
+            "department": dept,
             "date_joined": u.date_joined.isoformat()
         })
         
@@ -113,11 +117,11 @@ def admin_metrics(request):
             class_dist_map[cat] = 0
             
     # Risk flagged documents
-    flagged_docs = Document.objects.filter(risk_status="Risk Detected").order_by("-created_at")
+    flagged_docs = Document.objects.select_related('user').filter(risk_status="Risk Detected").order_by("-created_at")
     flagged_docs_list = [{
         "id": d.id,
         "filename": d.filename,
-        "owner": d.user.username,
+        "owner": d.user.username if d.user else "Unknown",
         "classification": d.classification,
         "risk_status": d.risk_status,
         "risk_details": d.risk_details,
@@ -133,21 +137,21 @@ def admin_metrics(request):
     # Recent activities
     recent_activity_list = []
     
-    recent_docs = Document.objects.order_by("-created_at")[:5]
+    recent_docs = Document.objects.select_related('user').order_by("-created_at")[:5]
     for d in recent_docs:
         recent_activity_list.append({
             "type": "upload",
-            "username": d.user.username,
+            "username": d.user.username if d.user else "Unknown",
             "filename": d.filename,
             "department": d.department,
             "timestamp": d.created_at.isoformat()
         })
         
-    recent_msgs = ChatMessage.objects.filter(role="user").order_by("-created_at")[:5]
+    recent_msgs = ChatMessage.objects.select_related('session__user').filter(role="user").order_by("-created_at")[:5]
     for m in recent_msgs:
         recent_activity_list.append({
             "type": "chat",
-            "username": m.session.user.username,
+            "username": m.session.user.username if m.session and m.session.user else "Unknown",
             "content": m.content[:40] + ("..." if len(m.content) > 40 else ""),
             "timestamp": m.created_at.isoformat()
         })
@@ -241,11 +245,9 @@ def admin_invite(request):
             "department": department
         })
     except Exception as e:
-        # Even if email fails, the OTP is saved so admin can relay it manually
-        print(f"SMTP email send error: {str(e)}")
+        print(f"SMTP email send error for {email}: {str(e)}")
         return Response({
-            "detail": f"Invitation created but email delivery failed. OTP: {otp}. Error: {str(e)}",
-            "otp": otp,
+            "detail": f"Invitation created but email delivery failed. Contact the new employee manually with their OTP.",
             "role": role,
             "department": department
         }, status=status.HTTP_207_MULTI_STATUS)
@@ -256,15 +258,20 @@ def admin_invite(request):
 @permission_classes([IsAdminUser])
 def admin_users_list(request):
     """Get all users with their profiles for the corporate roster."""
+    profiles_map = {}
+    for p in UserProfile.objects.select_related('user').all():
+        profiles_map[p.user_id] = p
     users_data = []
     for u in User.objects.all().order_by('-date_joined'):
-        profile, _ = UserProfile.objects.get_or_create(user=u, defaults={'role': 'Viewer', 'department': 'General'})
+        profile = profiles_map.get(u.id)
+        role = profile.role if profile else 'Viewer'
+        dept = profile.department if profile else 'General'
         users_data.append({
             "id": u.id,
             "username": u.username,
             "email": u.email or "",
-            "role": profile.role,
-            "department": profile.department,
+            "role": role,
+            "department": dept,
             "date_joined": u.date_joined.isoformat()
         })
     return Response(users_data)
@@ -322,16 +329,20 @@ def admin_knowledge_graph_data(request):
     connections = []
 
     valid_departments = ['HR', 'Legal', 'Finance', 'Technical', 'General']
+    all_docs = Document.objects.select_related('user').all()
+    dept_group = {dept: [] for dept in valid_departments}
+    for d in all_docs:
+        if d.department in dept_group:
+            dept_group[d.department].append(d)
+        else:
+            dept_group.setdefault('General', []).append(d)
 
     for dept in valid_departments:
-        dept_docs = Document.objects.filter(department=dept)
-        doc_count = dept_docs.count()
-        chunk_sum = dept_docs.aggregate(models.Sum('chunk_count'))['chunk_count__sum'] or 0
-
+        dept_docs = dept_group.get(dept, [])
         departments_data.append({
             "name": dept,
-            "document_count": doc_count,
-            "chunk_count": chunk_sum
+            "document_count": len(dept_docs),
+            "chunk_count": sum(d.chunk_count or 0 for d in dept_docs)
         })
 
         for d in dept_docs:
@@ -344,7 +355,7 @@ def admin_knowledge_graph_data(request):
                 "classification": d.classification,
                 "risk_status": d.risk_status,
                 "file_size": d.file_size,
-                "owner": d.user.username
+                "owner": d.user.username if d.user else "Unknown"
             })
             connections.append({
                 "from_department": dept,

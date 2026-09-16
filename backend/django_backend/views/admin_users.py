@@ -84,11 +84,9 @@ def admin_invite(request):
             "department": department
         })
     except Exception as e:
-        # Even if email fails, the OTP is saved so admin can relay it manually
-        print(f"SMTP email send error: {str(e)}")
+        print(f"SMTP email send error for {email}: {str(e)}")
         return Response({
-            "detail": f"Invitation created but email delivery failed. OTP: {otp}. Error: {str(e)}",
-            "otp": otp,
+            "detail": f"Invitation created but email delivery failed. Contact the new employee manually with their OTP.",
             "role": role,
             "department": department
         }, status=status.HTTP_207_MULTI_STATUS)

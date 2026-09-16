@@ -39,11 +39,7 @@ def get_admin_llm_config(request):
             "temperature": config.temperature,
             "k": config.k
         },
-        "api_keys": {
-            "groq": config.groq_api_key,
-            "gemini": config.gemini_api_key,
-            "openai": config.openai_api_key
-        }
+        "api_keys": config.masked_keys()
     })
 
 @api_view(['PUT'])
@@ -63,9 +59,12 @@ def update_admin_llm_config(request):
     if 'k' in cfg: config.k = cfg['k']
     
     keys = data.get("api_keys", {})
-    if "groq" in keys: config.groq_api_key = keys["groq"]
-    if "gemini" in keys: config.gemini_api_key = keys["gemini"]
-    if "openai" in keys: config.openai_api_key = keys["openai"]
+    if "groq" in keys and "*" not in keys["groq"]:
+        config.set_groq_key(keys["groq"])
+    if "gemini" in keys and "*" not in keys["gemini"]:
+        config.set_gemini_key(keys["gemini"])
+    if "openai" in keys and "*" not in keys["openai"]:
+        config.set_openai_key(keys["openai"])
         
     config.save()
     

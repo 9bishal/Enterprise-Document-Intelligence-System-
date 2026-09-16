@@ -1,8 +1,40 @@
+import time
 from typing import List, Dict, Any, TypedDict, Annotated
 import operator
 from langgraph.graph import StateGraph, END
 from app.vector_store import query_vector_store
 from app.llm_helper import call_llm, call_llm_json
+
+# Cache, cost tracking, and metrics integration (graceful if Redis unavailable)
+_cache_enabled = False
+_semantic_cache = None
+_evaluation_cache = None
+_cost_tracker = None
+_metrics = {}
+
+def _init_cache():
+    global _cache_enabled, _semantic_cache, _evaluation_cache, _cost_tracker, _metrics
+    if _cache_enabled:
+        return
+    try:
+        from django_backend.cache.semantic_cache import SemanticResponseCache
+        from django_backend.cache.domain_caches import EvaluationCache
+        from django_backend.cost_tracking.tracker import cost_tracker as ct
+        from django_backend.cost_tracking.pricing import estimate_cost as ec, count_tokens as ctk
+        from django_backend.monitoring.metrics import RAG_QUERIES_TOTAL, RAG_LATENCY, RAG_COST_TOTAL
+        _semantic_cache = SemanticResponseCache()
+        _evaluation_cache = EvaluationCache()
+        _cost_tracker = ct
+        _metrics = {
+            "queries_total": RAG_QUERIES_TOTAL,
+            "latency": RAG_LATENCY,
+            "cost_total": RAG_COST_TOTAL,
+            "estimate_cost": ec,
+            "count_tokens": ctk,
+        }
+        _cache_enabled = True
+    except Exception:
+        _cache_enabled = False
 
 
 # Define state schema
@@ -19,6 +51,14 @@ class AgentState(TypedDict):
     user_doc_ids: List[str]
     department: str
     admin_all: bool
+    cache_hit: bool
+    model_used: str
+    input_tokens: int
+    output_tokens: int
+    latency_ms: int
+    estimated_cost_usd: float
+    start_time: float
+    context_block: str
 
 
 # 1. Retrieve Node
@@ -29,15 +69,22 @@ def retrieve_node(state: AgentState) -> Dict[str, Any]:
     user_doc_ids = state.get("user_doc_ids", None)
     department = state.get("department", None)
     admin_all = state.get("admin_all", False)
-    
-    # Query Chroma DB with department scoping and user-specific document filter
+    max_context_tokens = state["model_config"].get("max_context_tokens", 3000)
+
     retrieved_docs = query_vector_store(
         question, n_results=k, doc_ids=user_doc_ids,
-        department=department, admin_all=admin_all
+        department=department, admin_all=admin_all, use_hybrid=True
     )
-    
+
+    from app.retrieval.reranker import rerank
+    ranked = rerank(question, retrieved_docs, top_k=k)
+
+    from app.retrieval.context_builder import build_context
+    context_block, used_chunks = build_context(ranked, max_context_tokens=max_context_tokens)
+
     return {
-        "documents": retrieved_docs,
+        "documents": used_chunks,
+        "context_block": context_block,
         "steps": ["retrieve"]
     }
 
@@ -57,29 +104,35 @@ def grade_documents_node(state: AgentState) -> Dict[str, Any]:
         print("No documents retrieved, triggering web search...")
         return {"documents": [], "web_search": True, "steps": ["grade_documents"]}
 
-    for doc in documents:
-        prompt = f"""
-        You are a strict document relevance checker. Decide if the document chunk below is relevant to the user query.
-        
-        User Query: {question}
-        Document Chunk: {doc['text']}
-        
-        Answer ONLY with a JSON object matching this schema:
-        {{
-            "relevant": true or false
-        }}
-        """
+    docs_text = "\n\n".join(
+        f"[DOC {i+1}] {d['text']}" for i, d in enumerate(documents)
+    )
+    prompt = f"""
+    You are a strict document relevance checker. Grade each document chunk below against the user query.
+    
+    User Query: {question}
+    
+    {docs_text}
+    
+    Answer ONLY with a JSON object matching this schema:
+    {{
+        "relevance": [true or false for each document]
+    }}
+    Example: {{"relevance": [true, false, true, false]}}
+    """
 
-        res = call_llm_json(
-            prompt=prompt,
-            system_prompt="You are a precise binary document relevance grading assistant. Return valid JSON only.",
-            provider=model_config.get("provider", "gemini"),
-            api_key=api_keys.get(model_config.get("provider", "gemini"), ""),
-            model_name=model_config.get("model", ""),
-            temperature=0.0,
-        )
+    res = call_llm_json(
+        prompt=prompt,
+        system_prompt="You are a precise document relevance grading assistant. Return valid JSON only.",
+        provider=model_config.get("provider", "gemini"),
+        api_key=api_keys.get(model_config.get("provider", "gemini"), ""),
+        model_name=model_config.get("model", ""),
+        temperature=0.0,
+    )
 
-        is_relevant = res.get("relevant", False)
+    relevance_list = res.get("relevance", [])
+    for i, doc in enumerate(documents):
+        is_relevant = relevance_list[i] if i < len(relevance_list) else False
         if is_relevant:
             print(f"-> Document '{doc['filename']}' is RELEVANT")
             filtered_docs.append(doc)
@@ -183,17 +236,20 @@ def generate_node(state: AgentState) -> Dict[str, Any]:
     critique = state.get("critique", "")
     regenerate_count = state.get("regenerate_count", 0)
 
-    # Construct context string
-    context_list = []
-    for i, doc in enumerate(documents):
-        context_list.append(f"Source [{i+1}] ({doc['filename']}): {doc['text']}")
-    context = "\n\n".join(context_list)
+    # Use pre-built context_block from hybrid retrieval if available
+    context = state.get("context_block", "")
+    if not context:
+        context_list = []
+        for i, doc in enumerate(documents):
+            context_list.append(f"Source [{i+1}] ({doc['filename']}): {doc['text']}")
+        context = "\n\n".join(context_list)
 
     system_prompt = """
-    You are Intradoc AI, an intelligent, professional document assistant. Answer the user's question comprehensively based ONLY on the provided document context. 
-    If the context does not contain enough information to answer, state that clearly rather than hallucinating.
-    Structure your answer with clear headings, bullet points, or lists where helpful. 
-    At the end of key statements, cite the sources by appending [1], [2], etc., corresponding to the indices of the documents provided.
+    You are Intradoc AI, a concise document assistant. Answer ONLY based on the provided document context.
+    If the context lacks enough information, state that clearly instead of guessing.
+    Keep your answer short and to the point - use short paragraphs or a brief bulleted list, no long exposition.
+    Cite the retrieved sources inline by appending [1], [2], etc., matching the Source indices below.
+    Never include any thinking, reasoning, analysis, or chain-of-thought text in your answer. Output only the final answer.
     """
 
     prompt = f"""
@@ -213,12 +269,19 @@ def generate_node(state: AgentState) -> Dict[str, Any]:
         Make sure every sentence in your answer is strictly supported by the sources above.
         """
 
-    generation = call_llm(
+    from app.llm_helper import call_llm_with_fallback
+    provider = model_config.get("provider", "gemini")
+    primary_model = model_config.get("model", "")
+    fallback_provider = model_config.get("fallback_provider", "")
+    fallback_model = model_config.get("fallback_model", "")
+    generation, model_used, prompt_cache_hit = call_llm_with_fallback(
         prompt=prompt,
         system_prompt=system_prompt,
-        provider=model_config.get("provider", "gemini"),
-        api_key=api_keys.get(model_config.get("provider", "gemini"), ""),
-        model_name=model_config.get("model", ""),
+        provider=provider,
+        api_key=api_keys.get(provider, ""),
+        primary_model=primary_model,
+        fallback_provider=fallback_provider,
+        fallback_model=fallback_model,
         temperature=model_config.get("temperature", 0.3),
     )
 
@@ -228,8 +291,10 @@ def generate_node(state: AgentState) -> Dict[str, Any]:
 
     return {
         "generation": generation,
+        "model_used": model_used,
         "steps": ["generate"],
         "regenerate_count": new_count,
+        "cache_hit": prompt_cache_hit,
     }
 
 
@@ -367,7 +432,7 @@ def get_available_documents(user_doc_ids: List[str] = None, department: str = No
                 "chunk_count": d.chunk_count,
                 "status": d.status,
                 "department": d.department,
-                "owner": d.owner.username if d.owner else "Unknown",
+                "owner": d.user.username if d.user else "Unknown",
                 "classification": d.classification or "General"
             }
             for d in docs
@@ -443,14 +508,58 @@ def run_rag_pipeline(question: str, api_keys: Dict[str, str], model_config: Dict
     Returns the complete execution steps in the order they were executed.
     Handles meta-queries about available documents.
     """
-    
+    start_time = time.time()
+    _init_cache()
+
+    # Check semantic cache first (RBAC-aware: only return hit if doc scope matches)
+    if _cache_enabled:
+        try:
+            cached = _semantic_cache.lookup(question)
+        except Exception as e:
+            print(f"Semantic cache lookup failed (continuing without cache): {e}")
+            cached = None
+        if cached is not None:
+            cached_doc_ids = set(cached.get("metadata", {}).get("doc_ids", []) or [])
+            current_doc_ids = set(user_doc_ids or [])
+            scope_match = (len(cached_doc_ids) == len(current_doc_ids) and cached_doc_ids == current_doc_ids)
+            if scope_match:
+                latency = int((time.time() - start_time) * 1000)
+                model_used = "cache"
+                ct = _metrics.get("count_tokens", lambda x: len(x)//4)
+                ec = _metrics.get("estimate_cost", lambda m,i,o: 0.0)
+                input_tokens = ct(question)
+                output_tokens = ct(cached["response"])
+                cost = ec(model_used, input_tokens, output_tokens)
+
+                if _cost_tracker:
+                    try:
+                        _cost_tracker.record(question, cached["response"], "semantic_cache", input_tokens, output_tokens, latency / 1000, cache_hit=True)
+                    except Exception as e:
+                        print(f"Cost tracking failed (continuing): {e}")
+
+                _metrics["queries_total"].labels("semantic_cache", True, True).inc()
+                _metrics["cost_total"].labels("semantic_cache").inc(cost)
+
+                return {
+                    "question": question,
+                    "generation": cached["response"],
+                    "documents": [],
+                    "steps": ["semantic_cache_hit"],
+                    "success": True,
+                    "cache_hit": True,
+                    "model_used": "semantic_cache",
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                    "estimated_cost_usd": cost,
+                    "latency_ms": latency,
+                }
+
     # Check if this is a meta-query about available documents
     if is_meta_query(question):
         print("---META QUERY DETECTED---")
         available_docs = get_available_documents(user_doc_ids, department, admin_all)
         response = generate_meta_response(available_docs)
         
-        # Create synthetic documents for the response (for display purposes)
         meta_docs = [
             {
                 "id": f"meta_{i}",
@@ -467,9 +576,15 @@ def run_rag_pipeline(question: str, api_keys: Dict[str, str], model_config: Dict
         return {
             "question": question,
             "generation": response,
-            "documents": meta_docs[:5],  # Show max 5 in sidebar for space
+            "documents": meta_docs[:5],
             "steps": ["retrieve", "meta_query"],
             "success": True,
+            "cache_hit": False,
+            "model_used": "meta_query",
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "estimated_cost_usd": 0.0,
+            "latency_ms": int((time.time() - start_time) * 1000),
         }
     
     initial_state = {
@@ -484,27 +599,100 @@ def run_rag_pipeline(question: str, api_keys: Dict[str, str], model_config: Dict
         "critique": "",
         "user_doc_ids": user_doc_ids,
         "department": department,
-        "admin_all": admin_all
+        "admin_all": admin_all,
+        "cache_hit": False,
+        "model_used": "",
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "latency_ms": 0,
+        "estimated_cost_usd": 0.0,
+        "start_time": start_time,
+        "context_block": "",
     }
 
     try:
         final_state = rag_graph.invoke(initial_state)
-
-        # The steps list contains all executed steps in order (due to operator.add)
         executed_steps = final_state.get("steps", [])
+        latency = int((time.time() - start_time) * 1000)
+        model = final_state.get("model_used", model_config.get("provider", "unknown"))
+        generation = final_state.get("generation", "")
+        ct = _metrics.get("count_tokens", lambda x: len(x)//4)
+        ec = _metrics.get("estimate_cost", lambda m,i,o: 0.0)
+        input_tokens = ct(question)
+        output_tokens = ct(generation)
+        cost = ec(model, input_tokens, output_tokens)
+
+        if _cache_enabled:
+            try:
+                _semantic_cache.store(question, generation, doc_ids=user_doc_ids)
+            except Exception as e:
+                print(f"Semantic cache store failed (continuing): {e}")
+
+        if _cost_tracker:
+            try:
+                _cost_tracker.record(question, generation, model, input_tokens, output_tokens, latency / 1000, cache_hit=False)
+            except Exception as e:
+                print(f"Cost tracking failed (continuing): {e}")
+
+        if _cache_enabled:
+            _metrics["queries_total"].labels(model, False, True).inc()
+            _metrics["latency"].labels(model).observe(latency / 1000)
+            _metrics["cost_total"].labels(model).inc(cost)
+
+        documents = final_state.get("documents", [])
+        evaluation_result = None
+        try:
+            from app.evaluation.evaluator import heuristic_scores, llm_judge
+            evaluation_result = heuristic_scores(generation, documents)
+            judge = llm_judge(question, final_state.get("context_block", ""), generation)
+            if judge:
+                evaluation_result["judge"] = judge
+        except Exception:
+            pass
+
+        try:
+            from app.analytics import trace_chat_turn
+            trace_chat_turn(
+                session_id="",
+                question=question,
+                answer=generation,
+                retrieved_chunks=documents,
+                model=model,
+                latency_ms=latency,
+                cost_usd=cost,
+                evaluation=evaluation_result,
+            )
+        except Exception:
+            pass
 
         return {
             "question": final_state["question"],
-            "generation": final_state["generation"],
-            "documents": final_state["documents"],
+            "generation": generation,
+            "documents": documents,
             "steps": executed_steps,
             "success": True,
+            "cache_hit": final_state.get("cache_hit", False),
+            "model_used": model,
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "estimated_cost_usd": cost,
+            "latency_ms": latency,
+            "evaluation": evaluation_result,
         }
     except Exception as e:
+        latency = int((time.time() - start_time) * 1000)
+        if _cache_enabled and "queries_total" in _metrics:
+            _metrics["queries_total"].labels("error", False, False).inc()
         return {
             "question": question,
             "generation": f"An error occurred while running the RAG pipeline: {str(e)}",
             "documents": [],
             "steps": ["retrieve", "error"],
             "success": False,
+            "cache_hit": False,
+            "model_used": "error",
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "estimated_cost_usd": 0.0,
+            "latency_ms": latency,
         }

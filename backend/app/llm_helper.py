@@ -1,16 +1,101 @@
 import os
+import re
 import json
+import time
 import urllib.request
 import urllib.error
 import ssl
+# pyrefly: ignore [missing-import]
 import google.generativeai as genai
-import urllib3
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+_is_debug = os.getenv("DEBUG", "False").lower() in ["true", "1", "yes"]
+if _is_debug:
+    import urllib3
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+    ssl_context = ssl.create_default_context()
+    ssl_context.check_hostname = False
+    ssl_context.verify_mode = ssl.CERT_NONE
+else:
+    ssl_context = ssl.create_default_context()
 
-# Create SSL context that doesn't verify certificates (for development)
-ssl_context = ssl.create_default_context()
-ssl_context.check_hostname = False
-ssl_context.verify_mode = ssl.CERT_NONE
+# Cache & metrics (lazy initialized)
+_cache_enabled = False
+_llm_cache = {}
+_llm_metrics = {}
+
+class CachedString(str):
+    is_cached: bool = False
+
+def _init_llm_cache():
+    global _cache_enabled, _llm_cache, _llm_metrics
+    if _cache_enabled:
+        return
+    try:
+        from django_backend.cache.domain_caches import PromptCache
+        from django_backend.cost_tracking.pricing import estimate_cost as ec, count_tokens as ct
+        from django_backend.monitoring.metrics import LLM_CALLS_TOTAL, LLM_LATENCY
+        _llm_cache["prompt"] = PromptCache()
+        _llm_metrics["calls"] = LLM_CALLS_TOTAL
+        _llm_metrics["latency"] = LLM_LATENCY
+        _llm_metrics["estimate_cost"] = ec
+        _llm_metrics["count_tokens"] = ct
+        _cache_enabled = True
+    except Exception:
+        _cache_enabled = False
+
+def resolve_llm_config():
+    """Return the effective (provider, model, api_key) from the admin-saved
+    global LLMConfig, or None when no provider has a usable API key."""
+    try:
+        from django_backend.models import LLMConfig
+        cfg = LLMConfig.objects.first()
+    except Exception:
+        cfg = None
+
+    if cfg is None:
+        return None
+
+    configured_provider = (cfg.provider or "groq").lower()
+    key_map = {
+        "groq": cfg.get_groq_key(),
+        "gemini": cfg.get_gemini_key(),
+        "openai": cfg.get_openai_key(),
+    }
+
+    candidates = [
+        (configured_provider, cfg.model, key_map.get(configured_provider, "")),
+        ("groq", cfg.model, key_map["groq"]),
+        ("gemini", cfg.model, key_map["gemini"]),
+        ("openai", cfg.model, key_map["openai"]),
+    ]
+
+    for provider, model, key in candidates:
+        if key:
+            return {"provider": provider, "model": model, "api_key": key}
+
+    # Fall back to environment variables
+    for provider, env_names in (
+        ("groq", ("GROQ_API_KEY",)),
+        ("gemini", ("GEMINI_API_KEY", "GOOGLE_API_KEY")),
+        ("openai", ("OPENAI_API_KEY",)),
+    ):
+        for env_name in env_names:
+            if os.environ.get(env_name):
+                return {"provider": provider, "model": cfg.model, "api_key": os.environ[env_name]}
+    return None
+
+
+def _strip_thinking(text: str) -> str:
+    """Remove chain-of-thought / reasoning text from model output."""
+    if not text:
+        return text
+    # Gemini-style: content wrapped between a 'thinking' marker and the final response
+    text = re.sub(r"<thinking>.*?</thinking>", "", text, flags=re.DOTALL)
+    text = re.sub(r"<\|thinking\|>.*?<\|/thinking\|>", "", text, flags=re.DOTALL)
+    text = re.sub(r"<\|reasoning\|>.*?<\|/reasoning\|>", "", text, flags=re.DOTALL)
+    text = re.sub(r"<thinking[^>]*>.*?</thinking>", "", text, flags=re.DOTALL)
+    text = re.sub(r"<start_of_turn>.*?<end_of_turn>\s*", "", text, flags=re.DOTALL)
+    return text.strip()
+
 
 def call_llm(
     prompt: str,
@@ -24,11 +109,25 @@ def call_llm(
     Universal LLM API Caller supporting Gemini, OpenAI, Groq, and Ollama.
     """
     provider = provider.lower()
+    _init_llm_cache()
+    cache_key_vars = {"prompt": prompt, "system_prompt": system_prompt, "provider": provider, "model": model_name, "temperature": temperature}
+    ct = _llm_metrics.get("count_tokens", lambda x: len(x)//4) if _cache_enabled else (lambda x: 0)
+    input_tokens = ct(prompt + system_prompt) if _cache_enabled else 0
+
+    # 1. Check prompt cache
+    if _cache_enabled:
+        cached = _llm_cache["prompt"].get_rendered("llm_response", cache_key_vars)
+        if cached is not None:
+            _llm_metrics["calls"].labels(provider, model_name or "unknown").inc()
+            res_str = CachedString(cached)
+            res_str.is_cached = True
+            return res_str
+
+    start_time = time.time()
 
     # 1. Google Gemini
     if provider == "gemini":
         try:
-            # Fallback to env if api_key is not passed in the request
             key = (
                 api_key
                 or os.environ.get("GEMINI_API_KEY")
@@ -42,9 +141,8 @@ def call_llm(
             genai.configure(api_key=key)
             name = model_name or "gemini-1.5-flash"
 
-            # Translate common naming
             if "gemini-2.5" in name.lower():
-                name = "gemini-1.5-flash"  # fallback to supported sdk models if 2.5 is not loaded
+                name = "gemini-1.5-flash"
 
             model = genai.GenerativeModel(
                 model_name=name,
@@ -52,11 +150,20 @@ def call_llm(
                 system_instruction=system_prompt if system_prompt else None,
             )
             response = model.generate_content(prompt)
-            return response.text
+            result = response.text
+            result = _strip_thinking(result)
+
+            latency = time.time() - start_time
+            if _cache_enabled:
+                _llm_metrics["calls"].labels(provider, name).inc()
+                _llm_metrics["latency"].labels(provider, name).observe(latency)
+                _llm_cache["prompt"].set_rendered("llm_response", cache_key_vars, result)
+
+            res_str = CachedString(result)
+            res_str.is_cached = False
+            return res_str
         except Exception as e:
             return f"Error with Gemini API: {str(e)}"
-
-    # 2. OpenAI / Groq / Ollama (OpenAI API spec or standard HTTP endpoint)
     else:
         url = ""
         headers = {
@@ -91,15 +198,13 @@ def call_llm(
         else:
             return f"Error: Unsupported provider '{provider}'"
 
-        # Construct messages payload
-        messages = []
+        messages_list = []
         if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": prompt})
+            messages_list.append({"role": "system", "content": system_prompt})
+        messages_list.append({"role": "user", "content": prompt})
 
-        payload = {"model": name, "messages": messages, "temperature": temperature}
+        payload = {"model": name, "messages": messages_list, "temperature": temperature}
 
-        # Check if the user wants JSON format
         if "JSON" in prompt:
             payload["response_format"] = {"type": "json_object"}
 
@@ -112,7 +217,18 @@ def call_llm(
             )
             with urllib.request.urlopen(req, timeout=45, context=ssl_context) as response:
                 res_data = json.loads(response.read().decode("utf-8"))
-                return res_data["choices"][0]["message"]["content"]
+                result = res_data["choices"][0]["message"]["content"]
+                result = _strip_thinking(result)
+
+            latency = time.time() - start_time
+            if _cache_enabled:
+                _llm_metrics["calls"].labels(provider, name).inc()
+                _llm_metrics["latency"].labels(provider, name).observe(latency)
+                _llm_cache["prompt"].set_rendered("llm_response", cache_key_vars, result)
+
+            res_str = CachedString(result)
+            res_str.is_cached = False
+            return res_str
         except urllib.error.HTTPError as e:
             try:
                 err_body = json.loads(e.read().decode("utf-8"))
@@ -122,6 +238,48 @@ def call_llm(
             return f"HTTP Error from {provider.capitalize()}: {err_msg}"
         except Exception as e:
             return f"Error connecting to {provider.capitalize()} API: {str(e)}"
+
+
+def call_llm_with_fallback(
+    prompt: str,
+    system_prompt: str = "",
+    provider: str = "gemini",
+    api_key: str = "",
+    primary_model: str = "",
+    fallback_provider: str = "",
+    fallback_model: str = "",
+    temperature: float = 0.2,
+) -> tuple[str, str, bool]:
+    """Try primary model; on failure fall back to a different provider/model.
+    Returns (response_text, model_used, cache_hit)."""
+    model_used = primary_model or f"{provider}_fast"
+    result = call_llm(
+        prompt=prompt,
+        system_prompt=system_prompt,
+        provider=provider,
+        api_key=api_key,
+        model_name=primary_model,
+        temperature=temperature,
+    )
+    is_cached = getattr(result, 'is_cached', False)
+    if not result.startswith("Error") and not result.startswith("HTTP Error"):
+        return str(result), model_used, is_cached
+
+    fp = fallback_provider
+    if not fp:
+        return str(result), model_used, False
+    fm = fallback_model or {"groq": "llama-3.3-70b-versatile", "gemini": "gemini-1.5-flash", "openai": "gpt-4o-mini"}.get(fp, "")
+    model_used = fm
+    print(f"Primary LLM failed, falling back to {fp}/{fm}: {result[:100]}")
+    result = call_llm(
+        prompt=prompt,
+        system_prompt=system_prompt,
+        provider=fp,
+        api_key=api_key,
+        model_name=fm,
+        temperature=temperature,
+    )
+    return str(result), model_used, getattr(result, 'is_cached', False)
 
 
 def call_llm_json(

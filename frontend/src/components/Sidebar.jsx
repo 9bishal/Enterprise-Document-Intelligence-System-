@@ -1,7 +1,8 @@
 import React, { useRef } from 'react';
 import { 
-  SparklesIcon, FileIcon, UploadIcon, TrashIcon, SettingsIcon 
+  SparklesIcon, FileIcon, UploadIcon, TrashIcon, SettingsIcon, FolderIcon, ShieldIcon, AlertTriangleIcon
 } from './Icons';
+import { PROVIDER_MODELS } from '../utils/constants';
 
 export default function Sidebar({
   documents,
@@ -24,26 +25,7 @@ export default function Sidebar({
 }) {
   const fileInputRef = useRef(null);
 
-  const providerModels = {
-    groq: [
-      { id: "llama-3.3-70b-versatile", name: "Llama 3.3 70B (Fast)" },
-      { id: "mixtral-8x7b-32768", name: "Mixtral 8x7B (Context)" },
-      { id: "llama-3.1-8b-instant", name: "Llama 3.1 8B (Instant)" }
-    ],
-    gemini: [
-      { id: "gemini-1.5-flash", name: "Gemini 1.5 Flash (Default)" },
-      { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro (Analytical)" }
-    ],
-    openai: [
-      { id: "gpt-4o-mini", name: "GPT-4o Mini (Cost-Effective)" },
-      { id: "gpt-4o", name: "GPT-4o (High-Intelligence)" }
-    ],
-    ollama: [
-      { id: "llama3", name: "Llama 3 (Local)" },
-      { id: "mistral", name: "Mistral (Local)" },
-      { id: "gemma2", name: "Gemma 2 (Local)" }
-    ]
-  };
+  const providerModels = PROVIDER_MODELS;
 
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -87,7 +69,7 @@ export default function Sidebar({
           display: 'flex',
           gap: '8px',
           padding: '4px',
-          backgroundColor: 'rgba(20, 20, 19, 0.04)',
+          backgroundColor: 'rgba(36, 50, 82, 0.04)',
           borderRadius: '12px',
           margin: '0 16px 16px 16px'
         }}>
@@ -101,9 +83,9 @@ export default function Sidebar({
               fontWeight: 600,
               border: 'none',
               backgroundColor: activeTab === 'workspace' ? '#FFFFFF' : 'transparent',
-              color: activeTab === 'workspace' ? '#141413' : '#8E8B82',
+              color: activeTab === 'workspace' ? '#1a1c20' : '#8b92a0',
               cursor: 'pointer',
-              boxShadow: activeTab === 'workspace' ? '0 2px 4px rgba(20, 20, 19, 0.04)' : 'none',
+              boxShadow: activeTab === 'workspace' ? '0 2px 4px rgba(36, 50, 82, 0.04)' : 'none',
               transition: 'all 0.2s ease'
             }}
           >
@@ -119,9 +101,9 @@ export default function Sidebar({
               fontWeight: 600,
               border: 'none',
               backgroundColor: activeTab === 'admin' ? '#FFFFFF' : 'transparent',
-              color: activeTab === 'admin' ? '#141413' : '#8E8B82',
+              color: activeTab === 'admin' ? '#1a1c20' : '#8b92a0',
               cursor: 'pointer',
-              boxShadow: activeTab === 'admin' ? '0 2px 4px rgba(20, 20, 19, 0.04)' : 'none',
+              boxShadow: activeTab === 'admin' ? '0 2px 4px rgba(36, 50, 82, 0.04)' : 'none',
               transition: 'all 0.2s ease'
             }}
           >
@@ -153,16 +135,16 @@ export default function Sidebar({
               opacity: currentUserRole === 'Viewer' ? 0.6 : 1,
               cursor: currentUserRole === 'Viewer' ? 'not-allowed' : 'pointer',
               backgroundColor: currentUserRole === 'Viewer' ? '#FAF9F5' : 'transparent',
-              borderColor: currentUserRole === 'Viewer' ? 'rgba(20, 20, 19, 0.04)' : 'var(--panel-border)',
+              borderColor: currentUserRole === 'Viewer' ? 'rgba(36, 50, 82, 0.04)' : 'var(--panel-border)',
               pointerEvents: currentUserRole === 'Viewer' ? 'none' : 'auto'
             }}
           >
-            <UploadIcon style={{ color: currentUserRole === 'Viewer' ? '#8E8B82' : 'inherit' }} />
+            <UploadIcon style={{ color: currentUserRole === 'Viewer' ? '#8b92a0' : 'inherit' }} />
             {uploading ? (
               <p>Uploading & indexing...</p>
             ) : currentUserRole === 'Viewer' ? (
               <>
-                <p style={{ color: '#8E8B82' }}>Upload Restricted</p>
+                <p style={{ color: '#8b92a0' }}>Upload Restricted</p>
                 <span style={{ fontSize: '10px' }}>Only Editors and Admins can upload</span>
               </>
             ) : (
@@ -179,13 +161,13 @@ export default function Sidebar({
             alignItems: 'center',
             justifyContent: 'space-between',
             padding: '6px 12px',
-            backgroundColor: 'rgba(20, 20, 19, 0.03)',
+            backgroundColor: 'rgba(36, 50, 82, 0.03)',
             borderRadius: '8px',
-            border: '1px solid rgba(20, 20, 19, 0.05)',
+            border: '1px solid rgba(36, 50, 82, 0.05)',
             gap: '6px'
           }}>
-            <span style={{ fontSize: '11px', color: '#8E8B82', display: 'flex', alignItems: 'center' }}>
-              📁 Workspace:
+            <span style={{ fontSize: '11px', color: '#8b92a0', display: 'flex', alignItems: 'center', gap: 4 }}>
+              <FolderIcon style={{ width: 12, height: 12 }} /> Workspace:
             </span>
             {currentUserRole === 'Admin' ? (
               <select 
@@ -194,7 +176,7 @@ export default function Sidebar({
                 style={{
                   fontSize: '11px',
                   fontWeight: '600',
-                  color: '#141413',
+                  color: '#1a1c20',
                   background: 'transparent',
                   border: 'none',
                   outline: 'none',
@@ -214,7 +196,7 @@ export default function Sidebar({
               <span style={{ 
                 fontSize: '11px', 
                 fontWeight: '600', 
-                color: '#141413' 
+                color: '#1a1c20' 
               }}>
                 {currentUserDepartment}
               </span>
@@ -242,8 +224,8 @@ export default function Sidebar({
                           padding: '2px 6px',
                           borderRadius: '6px',
                           backgroundColor: '#F3F2EC',
-                          color: '#5C5A55',
-                          border: '1px solid rgba(20, 20, 19, 0.04)',
+                          color: '#5b6472',
+                          border: '1px solid rgba(36, 50, 82, 0.04)',
                         }}>
                           {doc.classification || 'General'}
                         </span>
@@ -256,12 +238,12 @@ export default function Sidebar({
                               padding: '2px 6px',
                               borderRadius: '6px',
                               backgroundColor: 'rgba(224, 94, 63, 0.08)',
-                              color: '#E05E3F',
+                              color: '#c8a44d',
                               border: '1px solid rgba(224, 94, 63, 0.15)',
                               cursor: 'help'
                             }}
                           >
-                            ⚠️ Risk Detected
+<AlertTriangleIcon style={{ width: 10, height: 10, verticalAlign: 'middle', marginRight: 2 }} /> Risk Detected
                           </span>
                         )}
                       </div>
@@ -297,12 +279,15 @@ export default function Sidebar({
                   marginLeft: '8px', 
                   fontSize: '9px', 
                   backgroundColor: 'rgba(224, 94, 63, 0.1)', 
-                  color: '#E05E3F', 
+                  color: '#c8a44d', 
                   padding: '2px 6px', 
                   borderRadius: '4px', 
-                  fontWeight: '700' 
+                  fontWeight: '700',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 3
                 }}>
-                  🔒 ADMIN MANAGED
+                  <ShieldIcon style={{ width: 9, height: 9 }} /> ADMIN MANAGED
                 </span>
               )}
             </h3>
@@ -342,7 +327,7 @@ export default function Sidebar({
                 />
                 {modelConfig.provider === 'groq' && !apiKeys.groq && (
                   <span style={{ fontSize: '10px', color: 'var(--accent)', marginTop: 2, fontWeight: 500 }}>
-                    ⚠️ Groq API key required to execute chat query.
+<AlertTriangleIcon style={{ width: 10, height: 10, verticalAlign: 'middle', marginRight: 2 }} /> Groq API key required to execute chat query.
                   </span>
                 )}
               </div>
@@ -445,8 +430,8 @@ export default function Sidebar({
                 fontWeight: '700',
                 padding: '1px 5px',
                 borderRadius: '4px',
-                backgroundColor: currentUserRole === 'Admin' ? '#141413' : currentUserRole === 'Editor' ? 'rgba(224, 94, 63, 0.08)' : 'rgba(20, 20, 19, 0.05)',
-                color: currentUserRole === 'Admin' ? '#FAF9F5' : currentUserRole === 'Editor' ? '#E05E3F' : '#8E8B82',
+                backgroundColor: currentUserRole === 'Admin' ? '#1a1c20' : currentUserRole === 'Editor' ? 'rgba(224, 94, 63, 0.08)' : 'rgba(36, 50, 82, 0.05)',
+                color: currentUserRole === 'Admin' ? '#FAF9F5' : currentUserRole === 'Editor' ? '#c8a44d' : '#8b92a0',
                 alignSelf: 'flex-start',
                 marginTop: '3px',
                 textTransform: 'uppercase',
@@ -459,26 +444,7 @@ export default function Sidebar({
           </div>
           <button 
             onClick={onLogout}
-            style={{
-              padding: '6px 12px',
-              fontSize: 11,
-              borderRadius: 12,
-              backgroundColor: 'transparent',
-              color: 'var(--danger)',
-              borderColor: 'rgba(220, 38, 38, 0.15)',
-              transition: 'var(--transition-smooth)',
-              cursor: 'pointer',
-              marginLeft: '8px',
-              flexShrink: 0
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = 'rgba(220, 38, 38, 0.08)';
-              e.currentTarget.style.borderColor = 'rgba(220, 38, 38, 0.3)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'transparent';
-              e.currentTarget.style.borderColor = 'rgba(220, 38, 38, 0.15)';
-            }}
+            className="sidebar-logout-btn"
           >
             Sign Out
           </button>

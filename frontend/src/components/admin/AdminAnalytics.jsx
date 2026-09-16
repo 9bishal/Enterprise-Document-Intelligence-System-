@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import MetricCard from './MetricCard';
 import styles from './AdminStyles';
+import { AlertTriangleIcon, FolderIcon, DatabaseIcon, FileIcon, TrashIcon, ClockIcon } from '../Icons';
+import { API_BASE, safeLocalStorage } from '../../utils/constants';
+const storage = safeLocalStorage();
 
 export default function AdminAnalytics({ metrics }) {
   const { total_users, total_documents, total_chunks, estimated_tokens } = metrics.metrics;
@@ -12,10 +15,10 @@ export default function AdminAnalytics({ metrics }) {
     }
 
     setDeletingDocId(docId);
-    const token = localStorage.getItem('intradoc_token');
+    const token = storage.getItem('intradoc_token');
 
     try {
-      const response = await fetch(`http://localhost:8001/api/admin/documents/${docId}/delete`, {
+      const response = await fetch(`${API_BASE}/admin/documents/${docId}/delete`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -49,7 +52,7 @@ export default function AdminAnalytics({ metrics }) {
       <div style={styles.twoColumnGrid}>
         {/* Security Alerts */}
         <div className="glass-panel" style={styles.card}>
-          <h3 style={styles.cardTitle}>⚠️ Security & Compliance Flags</h3>
+          <h3 style={styles.cardTitle}><AlertTriangleIcon style={{ width: 16, height: 16, verticalAlign: 'middle', marginRight: 6, color: 'var(--accent)' }} /> Security & Compliance Flags</h3>
           {metrics.flagged_documents.length === 0 ? (
             <p style={{ fontSize: '13px', color: '#8E8B82' }}>No compliance risks detected in current index.</p>
           ) : (
@@ -70,7 +73,7 @@ export default function AdminAnalytics({ metrics }) {
 
         {/* Data Classification */}
         <div className="glass-panel" style={styles.card}>
-          <h3 style={styles.cardTitle}>📂 Data Classification Dist.</h3>
+          <h3 style={styles.cardTitle}><FolderIcon style={{ width: 16, height: 16, verticalAlign: 'middle', marginRight: 6 }} /> Data Classification Dist.</h3>
           <div style={styles.distGrid}>
             {Object.entries(metrics.classification_distribution).map(([category, count]) => (
               <div key={category} style={styles.distRow}>
@@ -84,7 +87,7 @@ export default function AdminAnalytics({ metrics }) {
 
       {/* Vector Database Documents */}
       <div className="glass-panel" style={{ ...styles.card, marginTop: '24px' }}>
-        <h3 style={styles.cardTitle}>🗄️ Vector Database - Indexed Documents</h3>
+        <h3 style={styles.cardTitle}><DatabaseIcon style={{ width: 16, height: 16, verticalAlign: 'middle', marginRight: 6 }} /> Vector Database - Indexed Documents</h3>
         <p style={{ fontSize: '12px', color: '#8E8B82', marginBottom: '16px' }}>
           Complete list of documents currently available in the vector database for RAG retrieval
         </p>
@@ -93,7 +96,7 @@ export default function AdminAnalytics({ metrics }) {
             {metrics.indexed_documents.map((doc, idx) => (
               <div key={doc.id || idx} style={styles.listItem}>
                 <div style={styles.listHeader}>
-                  <span style={styles.itemTitle}>📄 {doc.filename}</span>
+                    <span style={styles.itemTitle}><FileIcon style={{ width: 14, height: 14, verticalAlign: 'middle', marginRight: 4 }} /> {doc.filename}</span>
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                     <span style={{ fontSize: '11px', fontWeight: '600', color: '#648F64', background: 'rgba(100, 150, 100, 0.15)', padding: '4px 8px', borderRadius: '4px' }}>
                       {doc.status}
@@ -113,7 +116,7 @@ export default function AdminAnalytics({ metrics }) {
                         transition: 'all 0.2s'
                       }}
                     >
-                      {deletingDocId === doc.id ? '⏳ Deleting...' : '🗑️ Delete'}
+                      {deletingDocId === doc.id ? <><ClockIcon style={{ width: 12, height: 12, verticalAlign: 'middle', marginRight: 3 }} /> Deleting...</> : <><TrashIcon style={{ width: 12, height: 12, verticalAlign: 'middle', marginRight: 3 }} /> Delete</>}
                     </button>
                   </div>
                 </div>
@@ -130,7 +133,7 @@ export default function AdminAnalytics({ metrics }) {
 
       {/* Audit Log */}
       <div className="glass-panel" style={{ ...styles.card, marginTop: '24px' }}>
-        <h3 style={styles.cardTitle}>📜 Global Audit Stream</h3>
+        <h3 style={styles.cardTitle}><ClockIcon style={{ width: 16, height: 16, verticalAlign: 'middle', marginRight: 6 }} /> Global Audit Stream</h3>
         <table style={styles.table}>
           <thead>
             <tr>

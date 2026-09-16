@@ -1,16 +1,17 @@
 # Document Intelligent System
 
-A full-stack document intelligence platform that leverages **RAG (Retrieval-Augmented Generation)** to provide smart, context-aware document analysis and querying. Built with Django REST Framework backend, React/Vite frontend, and advanced NLP capabilities.
+A full-stack document intelligence platform that leverages **RAG (Retrieval-Augmented Generation)** with hybrid search, semantic caching, real-time cost tracking, and multi-provider LLM support. Built with Django REST Framework backend, React/Vite frontend, and advanced NLP capabilities.
 
 ## 🎯 Overview
 
 The Document Intelligent System is designed to help organizations:
 - Upload and index documents with semantic understanding
-- Query documents using natural language
-- Get AI-powered answers with source attribution
+- Query documents using natural language with hybrid retrieval (dense + BM25)
+- Get AI-powered answers with source attribution and groundedness verification
 - Manage chat sessions and conversation history
 - Control access through role-based permissions
 - Filter results by department
+- Monitor LLM usage, costs, and system health
 
 ## 📁 Project Structure
 
@@ -22,21 +23,39 @@ document_intelligent_system/
 │   │   ├── llm_helper.py      # LLM API interactions (with SSL handling)
 │   │   ├── vector_store.py    # Vector database (Chroma) operations
 │   │   ├── database.py        # Database connection & setup
-│   │   └── main.py            # Main application entry
+│   │   ├── main.py            # Application entry & route registration
+│   │   ├── analytics.py       # Langfuse tracing integration
+│   │   ├── semantic_chunk.py  # Semantic document chunking
+│   │   ├── evaluation/        # Response evaluation (heuristic + LLM judge)
+│   │   └── retrieval/         # Hybrid retrieval pipeline
+│   │       ├── hybrid.py      # Dense + BM25 fusion via RRF
+│   │       ├── bm25.py        # BM25 keyword search
+│   │       ├── reranker.py    # Relevance reranking & threshold filtering
+│   │       └── context_builder.py # Token-budget-aware context assembly
 │   ├── django_backend/        # Django configuration & models
-│   │   ├── models.py          # Database models (Document, User, ChatSession, etc.)
+│   │   ├── models.py          # Database models (encrypted API keys, cost tracking)
 │   │   ├── views/             # API endpoints
 │   │   │   ├── auth.py        # Authentication endpoints
-│   │   │   ├── doc_api.py     # Document CRUD operations
+│   │   │   ├── doc_api.py     # Document CRUD + batch upload
 │   │   │   ├── doc_indexing.py # Document indexing & classification
-│   │   │   ├── rag.py         # RAG query endpoints
+│   │   │   ├── rag.py         # RAG query endpoints (with fallback)
 │   │   │   ├── admin.py       # Admin operations
 │   │   │   └── admin_*.py     # Specialized admin endpoints
-│   │   ├── serializers.py     # DRF serializers
+│   │   ├── serializers.py     # DRF serializers (with cost fields)
 │   │   ├── permissions.py     # Custom permission classes
 │   │   ├── middleware.py      # Custom middleware
-│   │   ├── settings.py        # Django settings
-│   │   ├── urls.py            # URL routing
+│   │   ├── settings.py        # Django settings (Redis, structured logging)
+│   │   ├── urls.py            # URL routing (health, cache, batch)
+│   │   ├── cache/             # Multi-layer caching system
+│   │   │   ├── semantic_cache.py # RBAC-aware semantic response cache
+│   │   │   ├── embedding_cache.py # Embedding cache
+│   │   │   └── domain_caches.py # Domain-specific caches
+│   │   ├── cost_tracking/     # LLM cost tracking
+│   │   │   ├── pricing.py     # Provider model pricing tables
+│   │   │   └── tracker.py     # Usage & cost aggregation
+│   │   ├── monitoring/        # System monitoring & health
+│   │   │   ├── metrics.py     # Prometheus metrics
+│   │   │   └── health.py      # Health check endpoints
 │   │   └── migrations/        # Database migrations
 │   ├── uploads/               # Temporary file uploads
 │   ├── data/                  # Vector database & SQLite storage
@@ -50,14 +69,20 @@ document_intelligent_system/
 │   │   ├── pages/            # Page components
 │   │   │   ├── QueryPage.jsx      # Chat interface with RAG pipeline
 │   │   │   ├── DocumentsPage.jsx  # Document management
-│   │   │   ├── SettingsPage.jsx   # Settings & configuration
+│   │   │   ├── SettingsPage.jsx   # Admin-managed config view
 │   │   │   └── ...
 │   │   ├── components/       # Reusable components
 │   │   │   ├── ChatWindow.jsx     # Chat UI
-│   │   │   ├── Visualizer.jsx     # RAG pipeline visualization
+│   │   │   ├── Visualizer.jsx     # RAG pipeline visualization (cost/metrics)
+│   │   │   ├── LandingPage.jsx    # Landing/welcome page
+│   │   │   ├── ErrorBoundary.jsx  # React error boundary
+│   │   │   ├── Toast.jsx          # Toast notification system
+│   │   │   ├── Icons.jsx          # SVG icon library
 │   │   │   ├── admin/             # Admin components
 │   │   │   └── ...
 │   │   ├── utils/            # Utility functions
+│   │   │   ├── api.js        # API client functions
+│   │   │   └── constants.js  # Shared constants (API_BASE, provider models, tiers)
 │   │   ├── App.jsx           # Main app component
 │   │   └── main.jsx          # Entry point
 │   ├── public/               # Static assets
@@ -75,7 +100,7 @@ document_intelligent_system/
 - **📄 Document Management**: Upload, index, and organize documents by department
 - **🔍 Semantic Search**: RAG-powered search with context awareness
 - **💬 Chat Interface**: Real-time conversational interface with message history
-- **📊 RAG Pipeline Visualization**: See each step of the retrieval and generation process
+- **📊 RAG Pipeline Visualization**: See each step of the retrieval and generation process with cost/metrics
 - **🏢 Department Filtering**: Query documents from specific departments
 - **👤 Role-Based Access Control**: Admin, Editor, Viewer roles with granular permissions
 
@@ -89,16 +114,28 @@ document_intelligent_system/
 - **REST API** with Django REST Framework
 - **JWT Authentication** for secure access
 - **Vector Database** (Chroma) for semantic search
-- **LLM Integration** with configurable API keys
+- **LLM Integration** with configurable API keys (Groq, Gemini, OpenAI, Ollama)
+- **Hybrid Retrieval**: Dense (semantic) + BM25 (keyword) search fused via RRF
+- **Semantic Cache**: RBAC-aware response reuse for similar queries, reducing cost
+- **LLM Fallback**: Automatic failover to secondary provider on error
+- **Web Search Fallback**: External web search when retrieval relevance is low
+- **Reranker**: Re-rank retrieved chunks with relevance threshold filtering
+- **Evaluation**: Heuristic scoring + LLM judge for response quality
+- **Cost Tracking**: Token counting, cost estimation per query
+- **Monitoring**: Prometheus metrics, health check endpoints, Langfuse tracing
+- **Encrypted API Keys**: Fernet encryption at rest for provider credentials
+- **Batch Upload**: Upload up to 1000 files at once with RQ/ThreadPool job queue
 - **Department-based Classification** for documents
+- **Structured Logging**: Quieted noisy libraries, DEBUG/INFO levels
 - **SSL/TLS Support** for secure LLM API calls
 - **Pagination & Filtering** for document queries
 
 ### Admin Features
 - Document deletion with vector store cleanup
 - User management and access control
-- LLM configuration management
-- System metrics and analytics
+- LLM configuration management (encrypted keys, masked display)
+- System metrics, cost analytics, and usage monitoring
+- Cache statistics endpoint
 
 ## 🛠️ Tech Stack
 
@@ -106,16 +143,22 @@ document_intelligent_system/
 - **Framework**: Django 4.x + Django REST Framework
 - **Database**: SQLite (with migration support)
 - **Vector DB**: Chroma (for semantic search)
-- **LLM**: OpenAI/Anthropic (configurable)
+- **LLM**: Groq, Gemini, OpenAI, Ollama (multi-provider with fallback)
 - **Authentication**: JWT tokens
+- **Job Queue**: RQ (Redis) with ThreadPoolExecutor fallback
+- **Caching**: Redis, multi-layer semantic + embedding cache
+- **Monitoring**: Prometheus, Langfuse tracing
+- **Encryption**: Fernet (symmetric) for API keys at rest
+- **Search**: BM25 + dense vector hybrid (RRF fusion)
 - **Language**: Python 3.10+
 
 ### Frontend
 - **Framework**: React 18.x
 - **Build Tool**: Vite
-- **Styling**: CSS-in-JS (styled with JSX)
-- **State Management**: React Hooks
+- **Styling**: CSS (navy/gold PERC-inspired design system)
+- **State Management**: React Hooks + context-based reducers
 - **HTTP Client**: Fetch API
+- **Icons**: SVG component library (replacing emoji)
 - **Language**: JavaScript (ES6+)
 
 ## 📋 Prerequisites
@@ -196,6 +239,11 @@ document_intelligent_system/
 - `POST /api/auth/register` - User registration
 - `POST /api/auth/refresh` - Refresh JWT token
 
+### Authentication
+- `POST /api/auth/login` - User login
+- `POST /api/auth/register` - User registration
+- `POST /api/auth/refresh` - Refresh JWT token
+
 ### Chat Sessions (CRUD)
 - `GET /api/chat/sessions` - List all chat sessions
 - `POST /api/chat/sessions` - Create new chat session
@@ -204,17 +252,25 @@ document_intelligent_system/
 - `GET /api/chat/sessions/{id}/messages` - Get session messages
 
 ### Chat Query
-- `POST /api/chat/query` - Send question and get RAG response
+- `POST /api/chat/query` - Send question and get RAG response (includes cost, model, cache fields)
 
 ### Documents
-- `GET /api/documents` - List documents
+- `GET /api/documents` - List documents (with limit/offset pagination)
 - `POST /api/documents/upload` - Upload document
+- `POST /api/documents/upload/batch` - Batch upload (up to 1000 files)
 - `DELETE /api/documents/{id}` - Delete document (admin only)
 - `GET /api/documents/search` - Search documents
 
 ### Admin
 - `GET /api/admin/metrics` - System metrics
+- `GET /api/admin/users` - Manage users
+- `POST /api/admin/llm/config` - Update LLM config (encrypted keys)
 - `DELETE /api/admin/documents/{id}` - Admin document deletion
+
+### Health & Monitoring
+- `GET /api/health/live` - Liveness probe
+- `GET /api/health/ready` - Readiness probe
+- `GET /api/cache/stats` - Cache statistics
 
 ## 🔐 Authentication
 
@@ -260,13 +316,16 @@ curl -X POST http://localhost:8000/api/chat/sessions \
 
 The system shows a visual representation of the RAG pipeline:
 
-1. **Document Retrieval** - Semantic search finds relevant documents
-2. **Context Processing** - Retrieved content is formatted
-3. **Prompt Engineering** - Context is added to user query
-4. **LLM Generation** - AI generates response
-5. **Source Attribution** - Sources are cited in response
+1. **Document Retrieval** - Hybrid search (dense + BM25 via RRF) finds relevant chunks
+2. **Reranking** - Relevance scores computed, low-confidence results filtered
+3. **Context Assembly** - Token-budget-aware context built from top chunks
+4. **Fallback Check** - If relevance below threshold, web search is invoked
+5. **LLM Generation** - AI generates response (with automatic fallback on error)
+6. **Source Attribution** - Sources are cited in response
+7. **Evaluation** - Heuristic scoring + optional LLM judge on response quality
+8. **Caching** - Similar future queries served from semantic cache
 
-Each step is tracked and displayed in real-time.
+Each step is tracked and displayed in real-time with cost, latency, model, and cache-hit indicators.
 
 ## 🔒 Security Features
 
@@ -277,6 +336,8 @@ Each step is tracked and displayed in real-time.
 - **Input Validation**: All inputs validated server-side
 - **SQL Injection Protection**: ORM-based queries prevent SQL injection
 - **Permission Classes**: Custom DRF permission classes
+- **API Key Encryption**: Fernet encryption at rest for all provider credentials
+- **Token Security**: httpOnly cookie support, secure token refresh cycles
 
 ## 🧪 Testing
 
@@ -290,6 +351,12 @@ python manage.py test
 ```bash
 cd frontend
 npm test
+```
+
+### LLM Evaluation
+```bash
+cd backend
+python -m app.evaluation.evaluator
 ```
 
 ## 📦 Deployment
@@ -353,9 +420,12 @@ For issues, questions, or suggestions:
 - Django REST Framework for excellent REST API framework
 - Chroma for vector database capabilities
 - React & Vite for modern web development
-- OpenAI/Anthropic for LLM capabilities
+- Groq, Gemini, OpenAI, Ollama for LLM capabilities
+- Redis for caching and job queue
+- Langfuse for LLM observability
+- Prometheus for system monitoring
 
 ---
 
-**Last Updated**: May 2026  
-**Version**: 1.0.0
+**Last Updated**: July 2026  
+**Version**: 2.0.0

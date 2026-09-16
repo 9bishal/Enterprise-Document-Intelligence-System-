@@ -62,13 +62,24 @@ dist/
 *.db
 *.sqlite
 *.sqlite3
-data/app.db
-data/chroma.sqlite3
+backend/db.sqlite3
+backend/data/app.db
+backend/data/chroma.sqlite3
 
 # Uploads
 uploads/
+backend/uploads/
 temp/
 tmp/
+backend/data/
+
+# Runtime / scratch test scripts (create these locally as needed)
+backend/check_db.py
+backend/get_token.py
+backend/test_*.py
+*.log
+backend/server.log
+start_redis.sh
 
 # Logs
 logs/
@@ -84,6 +95,9 @@ Thumbs.db
 .coverage
 .pytest_cache/
 htmlcov/
+
+# Static build output (Django collectstatic output)
+backend/staticfiles/
 
 # Chroma data
 data/chroma/
@@ -107,12 +121,29 @@ docker-compose.override.yml
 .vscode-test
 .vscode/
 
+# Documentation (local only - not for GitHub)
+docs/
+R2_Review_Documentation/
+IEEE_Research\ paper/
+IEEE_Research paper/
+grok\ and\ claude\ skill\ test/
+grok and claude skill test/
+GROQ_MODELS_TESTING.md
+.claude/
+CONTRIBUTING.md
+LLD.md
+RESUME.md
+
 # Sensitive files
 secrets.json
 config.json
 *.pem
 *.key
 .ssh/
+.env
+.env.*
+!.env.example
+!.env.*.example
 
 # Production
 .next/

@@ -68,16 +68,25 @@ DEBUG=False
 SECRET_KEY=change-me-to-something-secret
 DATABASE_URL=sqlite:///data/app.db
 
-# LLM
+# LLM (provide at least one API key)
 OPENAI_API_KEY=sk-your-key-here
 OPENAI_MODEL=gpt-4
+GROQ_API_KEY=gsk-your-key-here
+GEMINI_API_KEY=AIza-your-key-here
 
 # Vector DB
 CHROMA_HOST=localhost
 CHROMA_PORT=8000
 
+# Redis (required for caching & job queue)
+REDIS_URL=redis://localhost:6379/0
+
 # JWT
 JWT_SECRET=your-jwt-secret-key
+
+# Langfuse (optional - for LLM observability)
+# LANGFUSE_PUBLIC_KEY=pk-xxxx
+# LANGFUSE_SECRET_KEY=sk-xxxx
 ```
 
 ---

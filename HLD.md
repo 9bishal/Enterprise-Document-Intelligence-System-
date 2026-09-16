@@ -28,27 +28,52 @@ The Document Intelligent System is a full-stack RAG (Retrieval-Augmented Generat
     ┌────────┐   ┌──────────┐  ┌──────────┐  ┌──────────┐
     │  RAG   │   │   Chat   │  │Documents │  │  Admin   │
     │ Module │   │  Module  │  │ Module   │  │ Module   │
-    └────────┘   └──────────┘  └──────────┘  └──────────┘
-        │              │             │            │
-        └──────────────┼─────────────┴────────────┘
-                       │
-        ┌──────────────┼──────────────┐
-        ▼              ▼              ▼
-    ┌────────────┐ ┌──────────┐ ┌──────────────┐
-    │   Django   │ │ Vector   │ │ PostgreSQL/  │
-    │  ORM Models│ │   Store  │ │   SQLite     │
-    │            │ │ (Chroma) │ │              │
-    └────────────┘ └──────────┘ └──────────────┘
-        │              │              │
-        └──────────────┼──────────────┘
-                       │
-        ┌──────────────┼──────────────┐
-        ▼              ▼              ▼
-    ┌──────────┐  ┌──────────┐  ┌──────────┐
-    │ LLM APIs │  │ Document │  │  Vector  │
-    │(OpenAI) │  │ Processing   │  Database│
-    │          │  │ (PDF/Text)   │          │
-    └──────────┘  └──────────┘  └──────────┘
+    └────┬───┘   └──────────┘  └────┬─────┘  └──────────┘
+         │                          │
+         ▼                          ▼
+    ┌──────────┐             ┌──────────────┐
+    │ Hybrid   │             │   Batch      │
+    │ Retrieval│             │   Uploader   │
+    │(BM25+Vec)│             │  (RQ/Thread) │
+    └────┬─────┘             └──────────────┘
+         │
+         ▼
+    ┌──────────┐
+    │ Reranker │
+    └────┬─────┘
+         │
+    ┌────▼─────┐   ┌───────────┐   ┌───────────┐
+    │ Semantic │   │  Cost &   │   │Monitoring │
+    │  Cache   │   │ Tracking  │   │(Prom/     │
+    │(RBAC)    │   │(Tokens, $)│   │ Langfuse) │
+    └──────────┘   └───────────┘   └───────────┘
+         │              │              │
+         └──────────────┼──────────────┘
+                        │
+        ┌──────────────┼──────────────┬──────────────┐
+        ▼              ▼              ▼              ▼
+    ┌────────────┐ ┌──────────┐ ┌──────────────┐ ┌────────┐
+    │   Django   │ │  Chroma  │ │   SQLite     │ │ Redis  │
+    │  ORM Models│ │(Vector)  │ │              │ │(Cache) │
+    └────────────┘ └──────────┘ └──────────────┘ └────────┘
+        │              │              │              │
+        └──────────────┼──────────────┘              │
+                       │                             │
+        ┌──────────────┼──────────────┐              │
+        ▼              ▼              ▼              │
+    ┌──────────┐  ┌──────────┐  ┌──────────┐        │
+    │ LLM APIs │  │ Document │  │  Web     │        │
+    │(Multi-   │  │Processing │  │  Search  │        │
+    │ Provider)│  │(PDF/Text)│  │(Fallback)│        │
+    └──────────┘  └──────────┘  └──────────┘        │
+                                                   │
+    ┌────────────────────────────────────────────────┘
+    │  (Job Queue)
+    ▼
+┌──────────┐
+│  RQ Job  │
+│  Workers │
+└──────────┘
 ```
 
 ---
@@ -110,24 +135,42 @@ RAG Pipeline starts:
     │
     ├─ Step 1: Generate query embeddings
     │
-    ├─ Step 2: Search vector store (filtered by department)
-    │          Returns: Top-K similar chunks
+    ├─ Step 2: Hybrid search (dense + BM25 via RRF) filtered by department
+    │          Returns: Top-K chunks with BM25 + vector similarity fusion
     │
-    ├─ Step 3: Retrieve full document context
+    ├─ Step 3: Rerank results with relevance scoring
+    │          Filter out chunks below RELEVANCE_THRESHOLD
     │
-    ├─ Step 4: Build prompt with context + query
+    ├─ Step 4: Check semantic cache (RBAC-aware)
+    │          If similar query found → return cached response
     │
-    ├─ Step 5: Call LLM API (OpenAI GPT-4)
+    ├─ Step 5: If relevance too low → invoke web search fallback
     │
-    ├─ Step 6: Stream response back to frontend
+    ├─ Step 6: Build context (token-budget-aware), construct prompt
     │
-    └─ Step 7: Save ChatMessage (assistant role) with sources
+    ├─ Step 7: Call primary LLM provider (Groq/Gemini/OpenAI/Ollama)
+    │          On failure → fallback to secondary provider
+    │
+    ├─ Step 8: Evaluate response quality (heuristic scores + optional LLM judge)
+    │
+    ├─ Step 9: Cache response in semantic cache
+    │
+    ├─ Step 10: Save ChatMessage with model_used, tokens, cost, latency, cache_hit
+    │
+    └─ Step 11: Trace to Langfuse (if configured)
     │
     ▼
 Response: {
     content: "Answer from LLM",
     sources: [...],
-    steps: [...]
+    steps: [...],
+    model_used: "llama-3.3-70b-versatile",
+    input_tokens: 450,
+    output_tokens: 120,
+    estimated_cost_usd: 0.00015,
+    latency_ms: 1250,
+    cache_hit: false,
+    evaluation: { heuristic: 0.85, llm_judge: 4 }
 }
     │
     ▼
@@ -291,12 +334,13 @@ DocumentChunk
 
 ```
 RAG Pipeline orchestrates:
-├─ Query Embedding Generation
-├─ Vector Store Search (Chroma)
-├─ Document Retrieval
-├─ Prompt Construction
-├─ LLM API Calls (OpenAI)
-└─ Response Processing
+├─ Hybrid Retrieval (Dense + BM25 via RRF)
+├─ Reranking & Threshold Filtering
+├─ Context Assembly (token-budget-aware)
+├─ Web Search Fallback
+├─ LLM API Calls (multi-provider with fallback)
+├─ Response Evaluation (heuristic + LLM judge)
+└─ Semantic Caching (RBAC-aware)
 ```
 
 ### Chat Module
@@ -304,10 +348,11 @@ RAG Pipeline orchestrates:
 ```
 Chat Service manages:
 ├─ Session CRUD operations
-├─ Message storage
+├─ Message storage (with cost/metrics metadata)
 ├─ Query routing to RAG
 ├─ Response formatting
-└─ Source attribution
+├─ Source attribution
+└─ Cost tracking per message
 ```
 
 ### Document Module
@@ -315,8 +360,9 @@ Chat Service manages:
 ```
 Document Service handles:
 ├─ File upload & validation
+├─ Batch upload (up to 1000 files via RQ/ThreadPool)
 ├─ Text extraction (PDF/Text)
-├─ Chunking strategy
+├─ Semantic chunking
 ├─ Embedding generation
 ├─ Vector store indexing
 └─ Metadata storage
@@ -327,10 +373,44 @@ Document Service handles:
 ```
 Admin Service provides:
 ├─ User management
-├─ Document deletion
+├─ Document deletion (with vector store cleanup)
 ├─ Analytics & reporting
-├─ LLM configuration
-└─ System monitoring
+├─ LLM configuration (encrypted API keys, masked display)
+├─ System monitoring (Prometheus metrics)
+├─ Cache statistics
+└─ Health checks
+```
+
+### Caching Module
+
+```
+Cache Service provides:
+├─ Semantic Cache (RBAC-aware, doc-scoped)
+├─ Embedding Cache
+├─ Domain-specific Caches
+├─ Cache metrics & statistics
+└─ Redis-backed with configurable TTL
+```
+
+### Cost Tracking Module
+
+```
+Cost Tracking handles:
+├─ Token counting (input + output)
+├─ Per-model pricing lookups
+├─ Estimated cost per query
+├─ Aggregate usage statistics
+└─ Prometheus cost metrics
+```
+
+### Monitoring Module
+
+```
+Monitoring provides:
+├─ Prometheus metrics (queries, latency, cost)
+├─ Langfuse tracing (chat turn observability)
+├─ Health check endpoints (liveness/readiness)
+└─ Structured logging (DEBUG/INFO levels)
 ```
 
 ---
@@ -341,13 +421,14 @@ Admin Service provides:
 
 ```
 App (Root)
+├─ LandingPage (welcome/feature showcase)
 ├─ LoginScreen
 ├─ MainLayout
 │  ├─ Sidebar
 │  └─ MainContent
 │     ├─ QueryPage
 │     │  ├─ ChatWindow
-│     │  ├─ Visualizer
+│     │  ├─ Visualizer (cost, latency, model, cache metrics)
 │     │  └─ KnowledgeGraphVisualizer
 │     │
 │     ├─ DocumentsPage
@@ -401,7 +482,7 @@ Authentication: Bearer Token (JWT)
 Error Handling: Standard HTTP Status Codes
 ```
 
-### Backend ↔ LLM (OpenAI)
+### Backend ↔ LLM (Multi-Provider)
 
 ```
 HTTPS API Calls:
@@ -409,6 +490,13 @@ HTTPS API Calls:
 ├─ POST /v1/chat/completions (Get responses)
 └─ Authentication: API Key
 
+Supported Providers:
+├─ Groq (llama, mixtral models)
+├─ Gemini (gemini-1.5-flash, gemini-1.5-pro)
+├─ OpenAI (gpt-4o-mini, gpt-4o)
+└─ Ollama (local, llama3, mistral, gemma2)
+
+Fallback: Primary → Secondary provider on failure
 Retry Logic: Exponential backoff
 Timeout: 30 seconds
 ```
@@ -448,14 +536,21 @@ Production Setup:
 
 ```
 1. Caching
-   ├─ Query cache for similar questions
+   ├─ Semantic cache for similar questions (RBAC-aware)
+   ├─ Embedding cache (lazy-initialized)
    ├─ Vector search cache
-   └─ Document chunk cache
+   └─ Domain-specific caches (Redis backend)
 
 2. Indexing
-   ├─ Vector database indexing
+   ├─ Vector database indexing (HNSW)
+   ├─ BM25 inverted index for keyword search
    ├─ Full-text search indexing
    └─ Department-based partitioning
+
+3. Hybrid Search
+   ├─ Dense (semantic) + BM25 (keyword) fusion
+   ├─ Reciprocal Rank Fusion (RRF) for score merging
+   └─ Reranker for precision filtering
 
 3. Pagination
    ├─ Chat messages pagination
@@ -516,9 +611,17 @@ Cloud deployment:
    └─ Response timeout: 60 seconds
 
 3. Vector Store
-   ├─ Chunk size: 512 tokens
+   ├─ Chunk size: 512 tokens (semantic boundary-aware)
    ├─ Overlap: 100 tokens
-   └─ Max vectors per collection: 1M
+   ├─ Max vectors per collection: 1M
+   ├─ Hybrid search: BM25 + dense vector via RRF
+   └─ Relevance threshold: configurable (default 0.7)
+
+4. Semantic Cache
+   ├─ Max cache size: 10,000 entries
+   ├─ Default TTL: 24 hours
+   ├─ Similarity threshold: 0.85
+   └─ RBAC-scoped: cached per user/role/doc access
 
 4. Concurrent Users
    ├─ Dev: 10 concurrent users
@@ -585,25 +688,29 @@ Components:
    ├─ Multi-modal documents (images, videos)
    ├─ Real-time collaboration
    ├─ Custom knowledge graphs
-   └─ Multi-language support
+   ├─ Multi-language support
+   ├─ Document versioning system
+   └─ Webhook support for document events
 
 2. Performance
-   ├─ Vector store caching
-   ├─ Query result caching
-   ├─ Batch processing
-   └─ Async background jobs
+   ├─ Advanced RRF tuning per department
+   ├─ Adaptive chunking strategy
+   ├─ Distributed vector store (Pinecone/Weaviate)
+   └─ Async background jobs (already with RQ/ThreadPool)
 
 3. Security
    ├─ End-to-end encryption
    ├─ Document watermarking
    ├─ Audit logging
-   └─ IP whitelisting
+   ├─ IP whitelisting
+   └─ API key rotation
 
 4. Infrastructure
    ├─ Kubernetes deployment
    ├─ Auto-scaling groups
    ├─ Disaster recovery
-   └─ Multi-region setup
+   ├─ Multi-region setup
+   └─ Redis Sentinel for high-availability cache
 ```
 
 ---
@@ -618,6 +725,6 @@ Components:
 
 ---
 
-**Last Updated**: May 2026
-**Version**: 1.0
+**Last Updated**: July 2026
+**Version**: 2.0
 **Status**: Production Ready

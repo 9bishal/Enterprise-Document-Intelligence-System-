@@ -1,17 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../utils/api';
-import { SparklesIcon } from './Icons';
+import { SparklesIcon, BarChartIcon, UsersIcon, NetworkIcon, SettingsIcon } from './Icons';
+import { safeLocalStorage } from '../utils/constants';
+const storage = safeLocalStorage();
 import AdminAnalytics from './admin/AdminAnalytics';
 import AdminRoster from './admin/AdminRoster';
 import AdminGraph from './admin/AdminGraph';
 import AdminSystemConfig from './admin/AdminSystemConfig';
 
 const NAV_ITEMS = [
-  { key: 'analytics', icon: '📊', label: 'Analytics & Security' },
-  { key: 'roster',    icon: '👥', label: 'Corporate Roster' },
-  { key: 'graph',     icon: '🕸️', label: 'Knowledge Graph' },
-  { key: 'system',    icon: '⚙️', label: 'System Config' },
+  { key: 'analytics', icon: BarChartIcon, label: 'Analytics & Security' },
+  { key: 'roster',    icon: UsersIcon, label: 'Corporate Roster' },
+  { key: 'graph',     icon: NetworkIcon, label: 'Knowledge Graph' },
+  { key: 'system',    icon: SettingsIcon, label: 'System Config' },
 ];
 
 export default function AdminDashboard({ 
@@ -27,7 +29,7 @@ export default function AdminDashboard({
   const [llmConfig, setLlmConfig] = useState(null);
   const [savingLlm, setSavingLlm] = useState(false);
 
-  const token = localStorage.getItem('intradoc_token');
+  const token = storage.getItem('intradoc_token');
   const authHeaders = {
     'Authorization': `Bearer ${token}`,
     'Content-Type': 'application/json'
@@ -92,7 +94,7 @@ export default function AdminDashboard({
                 className={`admin-nav-btn ${activeSubTab === item.key ? 'active' : ''}`}
                 onClick={() => setActiveSubTab(item.key)}
               >
-                <span className="admin-nav-icon">{item.icon}</span>
+                <span className="admin-nav-icon"><item.icon style={{ width: 16, height: 16 }} /></span>
                 <span>{item.label}</span>
               </button>
             ))}
@@ -103,7 +105,7 @@ export default function AdminDashboard({
           onClick={() => navigate('/query')}
           title="Go to Chat & Query Interface"
         >
-          <span>✦</span> RAG Workspace
+          <SparklesIcon style={{ width: 14, height: 14, color: '#030712' }} /> RAG Workspace
         </button>
 
           {/* Spacer */}

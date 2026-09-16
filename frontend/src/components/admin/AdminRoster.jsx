@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import styles from './AdminStyles';
+import { CheckCircleIcon, XCircleIcon, MailIcon, UsersIcon } from '../Icons';
 
 export default function AdminRoster({ users, authHeaders, API_BASE, onRefreshUsers }) {
   const [inviteEmail, setInviteEmail] = useState('');
@@ -18,13 +19,13 @@ export default function AdminRoster({ users, authHeaders, API_BASE, onRefreshUse
       });
       const data = await res.json();
       if (res.ok) {
-        setInviteMsg(`✅ ${data.detail}`);
+        setInviteMsg(`Success: ${data.detail}`);
         setInviteEmail('');
       } else {
-        setInviteMsg(`❌ ${data.detail}`);
+        setInviteMsg(`Error: ${data.detail}`);
       }
     } catch (e) {
-      setInviteMsg('❌ Network error sending invitation');
+      setInviteMsg('Network error sending invitation');
     }
   };
 
@@ -50,7 +51,7 @@ export default function AdminRoster({ users, authHeaders, API_BASE, onRefreshUse
     <div className="admin-scrollable">
       {/* Invite Section */}
       <div className="glass-panel" style={styles.card}>
-        <h3 style={styles.cardTitle}>✉️ Invite New Employee</h3>
+        <h3 style={styles.cardTitle}><MailIcon style={{ width: 16, height: 16, verticalAlign: 'middle', marginRight: 6 }} /> Invite New Employee</h3>
         <form onSubmit={handleInvite} style={{ display: 'flex', gap: '16px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <div style={{ flex: '1', minWidth: '200px' }}>
             <label style={styles.label}>Email Address</label>
@@ -83,7 +84,7 @@ export default function AdminRoster({ users, authHeaders, API_BASE, onRefreshUse
           </button>
         </form>
         {inviteMsg && (
-          <div style={{ marginTop: '12px', fontSize: '13px', color: inviteMsg.includes('✅') ? '#059669' : '#DC2626' }}>
+          <div style={{ marginTop: '12px', fontSize: '13px', color: inviteMsg.startsWith('Success') ? '#059669' : '#DC2626' }}>
             {inviteMsg}
           </div>
         )}
@@ -91,7 +92,7 @@ export default function AdminRoster({ users, authHeaders, API_BASE, onRefreshUse
 
       {/* Roster Table */}
       <div className="glass-panel" style={{ ...styles.card, marginTop: '24px' }}>
-        <h3 style={styles.cardTitle}>👥 Corporate Directory</h3>
+        <h3 style={styles.cardTitle}><UsersIcon style={{ width: 16, height: 16, verticalAlign: 'middle', marginRight: 6 }} /> Corporate Directory</h3>
         <table style={styles.table}>
           <thead>
             <tr>

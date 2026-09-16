@@ -1,7 +1,8 @@
-const API_BASE = 'http://localhost:8001/api';
+import { API_BASE, safeLocalStorage } from './constants';
+const storage = safeLocalStorage();
 
 const getHeaders = () => {
-  const token = localStorage.getItem('intradoc_token');
+  const token = storage.getItem('intradoc_token');
   const headers = {};
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;

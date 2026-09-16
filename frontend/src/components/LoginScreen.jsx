@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
 import './LoginScreen.css';
+import { API_BASE, safeLocalStorage } from '../utils/constants';
+import { SparklesIcon } from './Icons';
+const storage = safeLocalStorage();
 
 export default function LoginScreen({ onAuthSuccess }) {
   const [isLogin, setIsLogin] = useState(true);
@@ -24,7 +27,7 @@ export default function LoginScreen({ onAuthSuccess }) {
         return;
       }
       try {
-        const response = await fetch('http://localhost:8001/api/auth/forgot-password', {
+        const response = await fetch(`${API_BASE}/auth/forgot-password`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email }),
@@ -47,7 +50,7 @@ export default function LoginScreen({ onAuthSuccess }) {
         return;
       }
       try {
-        const response = await fetch('http://localhost:8001/api/auth/reset-password', {
+        const response = await fetch(`${API_BASE}/auth/reset-password`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, otp, new_password: password }),
@@ -59,7 +62,7 @@ export default function LoginScreen({ onAuthSuccess }) {
           setOtp('');
           setPassword('');
           setError('');
-          alert("Password reset successfully. You can now log in.");
+          setError("Password reset successfully. You can now log in.");
         } else {
           setError(data.detail || 'Failed to reset password.');
         }
@@ -82,8 +85,8 @@ export default function LoginScreen({ onAuthSuccess }) {
     setLoading(true);
 
     const url = isLogin 
-      ? 'http://localhost:8001/api/auth/login' 
-      : 'http://localhost:8001/api/auth/signup';
+      ? `${API_BASE}/auth/login` 
+      : `${API_BASE}/auth/signup`;
 
     const payload = isLogin 
       ? { username, password } 
@@ -101,9 +104,9 @@ export default function LoginScreen({ onAuthSuccess }) {
       const data = await response.json();
 
       if (response.ok) {
-        localStorage.setItem('intradoc_token', data.access);
-        localStorage.setItem('intradoc_role', data.role);
-        localStorage.setItem('intradoc_department', data.department || 'General');
+        storage.setItem('intradoc_token', data.access);
+        storage.setItem('intradoc_role', data.role);
+        storage.setItem('intradoc_department', data.department || 'General');
         onAuthSuccess(data.username, data.role, data.department || 'General');
       } else {
         setError(data.detail || 'Authentication failed.');
@@ -119,7 +122,7 @@ export default function LoginScreen({ onAuthSuccess }) {
     <div className="login-container">
       <div className="login-card glass-panel">
         <div className="login-header">
-          <div className="logo-icon login-logo-icon">✦</div>
+            <div className="logo-icon login-logo-icon"><SparklesIcon style={{ width: 24, height: 24, color: '#030712' }} /></div>
           <h2 className="login-title">Intradoc AI</h2>
           <p className="login-subtitle">
             {isForgotPassword 

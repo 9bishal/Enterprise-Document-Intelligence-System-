@@ -1,5 +1,7 @@
 import React from 'react';
 import styles from './AdminStyles';
+import { SettingsIcon, CpuIcon } from '../Icons';
+import { PROVIDER_MODELS, TIER_LABELS } from '../../utils/constants';
 
 export default function AdminSystemConfig({ 
   llmConfig, 
@@ -7,28 +9,14 @@ export default function AdminSystemConfig({
   handleSaveLlmConfig, 
   savingLlm 
 }) {
-  const providerModels = {
-    groq: [
-      { id: "llama-3.3-70b-versatile", name: "Llama 3.3 70B (Fast)" },
-      { id: "mixtral-8x7b-32768", name: "Mixtral 8x7B (Context)" },
-      { id: "llama-3.1-8b-instant", name: "Llama 3.1 8B (Instant)" }
-    ],
-    gemini: [
-      { id: "gemini-1.5-flash", name: "Gemini 1.5 Flash (Default)" },
-      { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro (Analytical)" }
-    ],
-    openai: [
-      { id: "gpt-4o-mini", name: "GPT-4o Mini (Cost-Effective)" },
-      { id: "gpt-4o", name: "GPT-4o (High-Intelligence)" }
-    ]
-  };
+  const providerModels = PROVIDER_MODELS;
 
   if (!llmConfig) return <div style={styles.loading}>Loading system configuration...</div>;
 
   return (
     <div className="admin-scrollable">
       <div className="glass-panel" style={styles.card}>
-        <h3 style={styles.cardTitle}>⚙️ Global LLM Configuration</h3>
+        <h3 style={styles.cardTitle}><SettingsIcon style={{ width: 16, height: 16, verticalAlign: 'middle', marginRight: 6 }} /> Global LLM Configuration</h3>
         <p style={{ fontSize: '13px', color: '#8E8B82', marginBottom: '20px' }}>
           Manage model providers, API keys, and model choices globally.
         </p>
@@ -83,9 +71,18 @@ export default function AdminSystemConfig({
                 style={styles.input}
               >
                 {providerModels[llmConfig.config.provider]?.map(m => (
-                  <option key={m.id} value={m.id}>{m.name}</option>
+                  <option key={m.id} value={m.id}>{m.name} ({TIER_LABELS[m.tier]?.label || 'Standard'})</option>
                 ))}
               </select>
+            </div>
+
+            {/* Tier legend */}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
+              {Object.entries(TIER_LABELS).map(([key, t]) => (
+                <span key={key} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', background: t.bg, borderRadius: 4, fontSize: 11, fontWeight: 600, color: t.color }}>
+                  <CpuIcon style={{ width: 10, height: 10 }} /> {t.label}
+                </span>
+              ))}
             </div>
           </div>
 
@@ -139,7 +136,7 @@ export default function AdminSystemConfig({
             className="action-btn primary" 
             onClick={handleSaveLlmConfig} 
             disabled={savingLlm}
-            style={{ padding: '12px 24px', fontSize: '14px' }}
+            style={{ padding: '12px 24px', fontSize: '14px', color: '#FFFFFF', background: '#243252', border: '1px solid #243252', borderRadius: '8px', fontWeight: 600, cursor: 'pointer' }}
           >
             {savingLlm ? 'Saving...' : 'Save Configuration'}
           </button>

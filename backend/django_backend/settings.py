@@ -14,6 +14,16 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
+# Ensure SSL/TLS (SMTP, HTTPS) uses a trusted CA bundle. The python.org macOS
+# build does not install root certificates by default, which breaks
+# SMTP over TLS (e.g. smtp.gmail.com) with CERTIFICATE_VERIFY_FAILED.
+try:
+    import certifi
+    os.environ.setdefault("SSL_CERT_FILE", certifi.where())
+    os.environ.setdefault("REQUESTS_CA_BUNDLE", certifi.where())
+except ImportError:
+    pass
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -42,12 +52,14 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    "rest_framework_simplejwt.token_blacklist",
     "django_backend",
 ]
 
 MIDDLEWARE = [
     "django_backend.middleware.CORSMiddleware", # Register CORS/CSRF middleware first
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -123,11 +135,24 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
 
 STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+STATICFILES_DIRS = [BASE_DIR / "static"]
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# Redis Configuration (used by caching layer)
+REDIS_URL = os.getenv("INTRADOC_REDIS_URL", "redis://localhost:6379/0")
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
@@ -148,6 +173,25 @@ SIMPLE_JWT = {
     'USER_ID_FIELD': 'id',
     'USER_ID_CLAIM': 'user_id',
     'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
+}
+
+# Structured Logging
+import logging
+logging.basicConfig(
+    level=logging.DEBUG if DEBUG else logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+# Quiet noisy loggers
+for _lib in ("chromadb", "httpx", "urllib3", "sentence_transformers", "PIL"):
+    logging.getLogger(_lib).setLevel(logging.WARNING)
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {"structured": {"format": "%(asctime)s %(levelname)s %(name)s %(message)s", "datefmt": "%Y-%m-%d %H:%M:%S"}},
+    "handlers": {"console": {"class": "logging.StreamHandler", "formatter": "structured"}},
+    "root": {"handlers": ["console"], "level": logging.DEBUG if DEBUG else logging.INFO},
 }
 
 # Email (SMTP) Configuration

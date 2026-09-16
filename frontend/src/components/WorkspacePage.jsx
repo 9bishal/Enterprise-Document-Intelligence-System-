@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import ChatWindow from './ChatWindow';
 import Visualizer from './Visualizer';
 import Sidebar from './Sidebar';
+import { ChevronLeftIcon, ChevronRightIcon } from './Icons';
+import { safeLocalStorage } from '../utils/constants';
+const storage = safeLocalStorage();
 
 export default function WorkspacePage({ 
   API_BASE, 
@@ -35,7 +38,7 @@ export default function WorkspacePage({
   const [activeStep, setActiveStep] = useState(null); // Active step executing in LangGraph
   const [executionSteps, setExecutionSteps] = useState([]); // Visualizer steps
 
-  const token = localStorage.getItem('intradoc_token');
+  const token = storage.getItem('intradoc_token');
 
   // --- Fetch sessions once mounted ---
   useEffect(() => {
@@ -407,7 +410,7 @@ export default function WorkspacePage({
           onClick={() => setShowVisualizer(!showVisualizer)}
           title={showVisualizer ? "Collapse Analysis Panel" : "Expand Analysis Panel"}
         >
-          {showVisualizer ? '→' : '←'}
+          {showVisualizer ? <ChevronRightIcon style={{ width: 16, height: 16 }} /> : <ChevronLeftIcon style={{ width: 16, height: 16 }} />}
         </button>
       </div>
     </div>

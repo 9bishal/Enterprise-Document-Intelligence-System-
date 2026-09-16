@@ -1,6 +1,22 @@
 import os
+import hashlib
 from django_backend.models import Document
 from app.vector_store import index_document
+
+try:
+    from django_backend.cache.domain_caches import DocumentFingerprintCache
+    from django_backend.monitoring.metrics import DOCUMENTS_INDEXED
+    _fingerprint_cache = DocumentFingerprintCache()
+    _cache_enabled = True
+except Exception:
+    _cache_enabled = False
+
+def _compute_file_hash(filepath: str) -> str:
+    h = hashlib.sha256()
+    with open(filepath, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 # Helper function to classify and scan document risks
 def analyze_document_classification_and_risks(filepath):
@@ -59,12 +75,21 @@ def analyze_document_classification_and_risks(filepath):
 def process_document_indexing(doc_id, filename, filepath, department='General'):
     try:
         print(f"Indexing background thread started for file: {filename} (Department: {department})")
-        
+
+        if _cache_enabled:
+            content_hash = _compute_file_hash(filepath)
+            if _fingerprint_cache.is_duplicate(doc_id, content_hash):
+                print(f"Document '{filename}' content unchanged, skipping re-indexing")
+                doc = Document.objects.get(id=doc_id)
+                doc.status = "indexed"
+                doc.save()
+                return
+            _fingerprint_cache.set_fingerprint(doc_id, content_hash)
+
         # 1. Run AI classification and risk screening
         classification, risk_status, risk_details = analyze_document_classification_and_risks(filepath)
         
         # 2. Map department to classification if needed
-        # If AI classification doesn't match department type, use department-based classification
         dept_to_classification = {
             'HR': 'Human Resources',
             'Legal': 'Legal',
@@ -73,10 +98,8 @@ def process_document_indexing(doc_id, filename, filepath, department='General'):
             'General': 'General'
         }
         
-        # Use department-based classification as primary, AI classification as fallback
         mapped_classification = dept_to_classification.get(department, classification)
         if mapped_classification == 'General' and classification != 'General':
-            # If mapped is General but AI found something specific, use AI classification
             mapped_classification = classification
         
         # 3. Ingest document text chunks into department-scoped vector store
@@ -86,13 +109,19 @@ def process_document_indexing(doc_id, filename, filepath, department='General'):
         doc = Document.objects.get(id=doc_id)
         doc.status = "indexed"
         doc.chunk_count = chunk_count
-        doc.classification = mapped_classification  # Use mapped classification
+        doc.classification = mapped_classification
         doc.risk_status = risk_status
         doc.risk_details = risk_details
         doc.save()
+
+        if _cache_enabled:
+            DOCUMENTS_INDEXED.labels(department, "indexed").inc()
+
         print(f"Indexing background thread completed successfully for: {filename} ({chunk_count} chunks, Class: {mapped_classification}, Risk: {risk_status}, Dept: {department})")
     except Exception as e:
         print(f"Indexing error in background thread for {filename}: {str(e)}")
+        if _cache_enabled:
+            DOCUMENTS_INDEXED.labels(department, "error").inc()
         try:
             doc = Document.objects.get(id=doc_id)
             doc.status = "error"

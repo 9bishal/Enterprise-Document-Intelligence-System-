@@ -1,65 +1,13 @@
-import React, { useState } from 'react';
-import { SettingsIcon } from '../components/Icons';
+import React from 'react';
+import { useNavigate } from 'react-router-dom';
+import { SettingsIcon, LockIcon, BarChartIcon, ZapIcon, CpuIcon } from '../components/Icons';
+import { TIER_LABELS } from '../utils/constants';
 
 export default function SettingsPage({
-  API_BASE,
-  apiKeys,
-  handleApiKeyChange,
-  modelConfig,
-  setModelConfig,
-  isGlobalConfigEnforced,
   userRole
 }) {
-  const [copyFeedback, setCopyFeedback] = useState({});
-  
-  // Only Admins can see and configure API keys
+  const navigate = useNavigate();
   const isAdmin = userRole === 'Admin';
-
-  const providerModels = {
-    groq: [
-      { id: "llama-3.3-70b-versatile", name: "Llama 3.3 70B (Fast)" },
-      { id: "mixtral-8x7b-32768", name: "Mixtral 8x7B (Context)" },
-      { id: "llama-3.1-8b-instant", name: "Llama 3.1 8B (Instant)" }
-    ],
-    gemini: [
-      { id: "gemini-1.5-flash", name: "Gemini 1.5 Flash (Default)" },
-      { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro (Analytical)" }
-    ],
-    openai: [
-      { id: "gpt-4o-mini", name: "GPT-4o Mini (Cost-Effective)" },
-      { id: "gpt-4o", name: "GPT-4o (High-Intelligence)" }
-    ],
-    ollama: [
-      { id: "llama3", name: "Llama 3 (Local)" },
-      { id: "mistral", name: "Mistral (Local)" },
-      { id: "gemma2", name: "Gemma 2 (Local)" }
-    ]
-  };
-
-  const handleProviderChange = (e) => {
-    const provider = e.target.value;
-    const defaultModel = providerModels[provider][0].id;
-    setModelConfig({
-      ...modelConfig,
-      provider,
-      model: defaultModel
-    });
-  };
-
-  const handleConfigValueChange = (key, val) => {
-    setModelConfig({
-      ...modelConfig,
-      [key]: val
-    });
-  };
-
-  const handleCopyToClipboard = (text, key) => {
-    navigator.clipboard.writeText(text);
-    setCopyFeedback({ ...copyFeedback, [key]: true });
-    setTimeout(() => {
-      setCopyFeedback({ ...copyFeedback, [key]: false });
-    }, 2000);
-  };
 
   return (
     <div className="settings-page">
@@ -69,231 +17,38 @@ export default function SettingsPage({
           <SettingsIcon style={{ width: 28, height: 28, color: '#030712' }} />
           <div>
             <h1>System Configuration</h1>
-            <p className="subtitle">Configure LLM providers, API keys, and model parameters</p>
+            <p className="subtitle">Configuration is managed by your administrator</p>
           </div>
         </div>
-        <a href='/query'><h1>Back to Workspace</h1></a>
+        <button onClick={() => navigate('/query')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}><h1>Back to Workspace</h1></button>
       </div>
 
-      {/* Global Config Warning */}
-      {isGlobalConfigEnforced && (
-        <div className="info-banner">
-          <span>🔒</span>
-          <p>Global configuration is enforced by your administrator. Local settings are read-only.</p>
-        </div>
-      )}
-
       <div className="settings-container">
-        {/* API Keys Section - Only visible to Admins */}
-        {isAdmin ? (
-        <section className="settings-section">
-          <h2 className="section-title">API Keys & Credentials</h2>
-          <p className="section-description">
-            Provide API keys for the LLM providers you want to use. Keys are stored locally in your browser.
-          </p>
-
-          <div className="settings-grid">
-            {/* Groq */}
-            <div className="settings-card">
-              <div className="card-header">
-                <h3>Groq</h3>
-                <span className="badge free">Free</span>
-              </div>
-              <p className="provider-desc">Fast inference API with Llama and Mixtral models</p>
-              <div className="input-group">
-                <label>API Key</label>
-                <div className="input-with-action">
-                  <input
-                    type="password"
-                    placeholder="gsk_..."
-                    value={apiKeys.groq || ''}
-                    onChange={(e) => handleApiKeyChange('groq', e.target.value)}
-                    disabled={isGlobalConfigEnforced}
-                  />
-                  {apiKeys.groq && (
-                    <button
-                      className="action-btn"
-                      onClick={() => handleCopyToClipboard(apiKeys.groq, 'groq')}
-                      title="Copy to clipboard"
-                    >
-                      {copyFeedback.groq ? '✓' : '📋'}
-                    </button>
-                  )}
-                </div>
-                <a href="https://console.groq.com" target="_blank" rel="noopener noreferrer" className="link">
-                  Get free API key →
-                </a>
-              </div>
-            </div>
-
-            {/* Gemini */}
-            <div className="settings-card">
-              <div className="card-header">
-                <h3>Google Gemini</h3>
-                <span className="badge free">Free Tier</span>
-              </div>
-              <p className="provider-desc">Advanced reasoning with Google's latest models</p>
-              <div className="input-group">
-                <label>API Key</label>
-                <div className="input-with-action">
-                  <input
-                    type="password"
-                    placeholder="AIza..."
-                    value={apiKeys.gemini || ''}
-                    onChange={(e) => handleApiKeyChange('gemini', e.target.value)}
-                    disabled={isGlobalConfigEnforced}
-                  />
-                  {apiKeys.gemini && (
-                    <button
-                      className="action-btn"
-                      onClick={() => handleCopyToClipboard(apiKeys.gemini, 'gemini')}
-                      title="Copy to clipboard"
-                    >
-                      {copyFeedback.gemini ? '✓' : '📋'}
-                    </button>
-                  )}
-                </div>
-                <a href="https://makersuite.google.com" target="_blank" rel="noopener noreferrer" className="link">
-                  Get free API key →
-                </a>
-              </div>
-            </div>
-
-            {/* OpenAI */}
-            <div className="settings-card">
-              <div className="card-header">
-                <h3>OpenAI</h3>
-                <span className="badge paid">Paid</span>
-              </div>
-              <p className="provider-desc">GPT-4o and other advanced models</p>
-              <div className="input-group">
-                <label>API Key</label>
-                <div className="input-with-action">
-                  <input
-                    type="password"
-                    placeholder="sk-..."
-                    value={apiKeys.openai || ''}
-                    onChange={(e) => handleApiKeyChange('openai', e.target.value)}
-                    disabled={isGlobalConfigEnforced}
-                  />
-                  {apiKeys.openai && (
-                    <button
-                      className="action-btn"
-                      onClick={() => handleCopyToClipboard(apiKeys.openai, 'openai')}
-                      title="Copy to clipboard"
-                    >
-                      {copyFeedback.openai ? '✓' : '📋'}
-                    </button>
-                  )}
-                </div>
-                <a href="https://platform.openai.com" target="_blank" rel="noopener noreferrer" className="link">
-                  Get API key →
-                </a>
-              </div>
-            </div>
-          </div>
-        </section>
-        ) : (
-          <section className="settings-section" style={{ border: '1px solid var(--border)', borderRadius: '8px', padding: '24px', backgroundColor: 'rgba(255, 165, 0, 0.05)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', color: 'var(--text-muted)' }}>
-              <span style={{ fontSize: '20px' }}>🔐</span>
+        {!isAdmin && (
+          <section className="settings-section" style={{ border: '1px solid rgba(20, 20, 19, 0.15)', borderRadius: '8px', padding: '24px', backgroundColor: 'rgba(100, 120, 160, 0.04)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <LockIcon style={{ width: 20, height: 20, color: '#8E8B82' }} />
               <div>
-                <h3 style={{ margin: '0 0 4px 0', color: '#141413' }}>API Keys & Credentials</h3>
-                <p style={{ margin: '0', fontSize: '13px' }}>API key management is restricted to administrators only. Contact your admin to configure API keys.</p>
+                <h3 style={{ margin: '0 0 4px 0', color: '#141413', fontSize: '15px', fontWeight: 600 }}>Managed by Administrator</h3>
+                <p style={{ margin: '0', fontSize: '13px', color: '#8E8B82' }}>LLM provider, model, API keys, and all configuration settings are managed by your administrator. Contact your admin for any changes.</p>
               </div>
             </div>
           </section>
         )}
 
-        {/* Model Configuration Section */}
+        {/* Tier Legend */}
         <section className="settings-section">
-          <h2 className="section-title">Model Configuration</h2>
+          <h2 className="section-title">Model Tiers</h2>
           <p className="section-description">
-            Choose your preferred LLM provider and configure model parameters
+            Models are grouped by capability and cost to help you choose the right balance.
           </p>
-
-          <div className="config-grid">
-            {/* Provider Selection */}
-            <div className="config-card">
-              <label className="config-label">LLM Provider</label>
-              <select
-                value={modelConfig.provider || 'groq'}
-                onChange={handleProviderChange}
-                disabled={isGlobalConfigEnforced}
-                className="config-select"
-              >
-                <option value="groq">Groq (Free, Fast)</option>
-                <option value="gemini">Google Gemini</option>
-                <option value="openai">OpenAI</option>
-                <option value="ollama">Ollama (Local)</option>
-              </select>
-              <p className="config-help">
-                Select the LLM provider to use for query responses
-              </p>
-            </div>
-
-            {/* Model Selection */}
-            <div className="config-card">
-              <label className="config-label">Model</label>
-              <select
-                value={modelConfig.model || 'llama-3.3-70b-versatile'}
-                onChange={(e) => handleConfigValueChange('model', e.target.value)}
-                disabled={isGlobalConfigEnforced}
-                className="config-select"
-              >
-                {(providerModels[modelConfig.provider] || []).map(m => (
-                  <option key={m.id} value={m.id}>{m.name}</option>
-                ))}
-              </select>
-              <p className="config-help">
-                Choose the specific model variant
-              </p>
-            </div>
-
-            {/* Temperature */}
-            <div className="config-card">
-              <label className="config-label">
-                Temperature: {modelConfig.temperature || 0.3}
-              </label>
-              <input
-                type="range"
-                min="0"
-                max="2"
-                step="0.1"
-                value={modelConfig.temperature || 0.3}
-                onChange={(e) => handleConfigValueChange('temperature', parseFloat(e.target.value))}
-                disabled={isGlobalConfigEnforced}
-                className="config-slider"
-              />
-              <div className="slider-labels">
-                <span>Precise</span>
-                <span>Balanced</span>
-                <span>Creative</span>
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+            {Object.entries(TIER_LABELS).map(([key, t]) => (
+              <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', background: t.bg, borderRadius: 8, border: '1px solid transparent' }}>
+                <CpuIcon style={{ width: 14, height: 14, color: t.color }} />
+                <span style={{ fontSize: 13, fontWeight: 600, color: t.color }}>{t.label}</span>
               </div>
-              <p className="config-help">
-                Lower = more precise, Higher = more creative
-              </p>
-            </div>
-
-            {/* Top K */}
-            <div className="config-card">
-              <label className="config-label">
-                Top K (Retrieval): {modelConfig.k || 4}
-              </label>
-              <input
-                type="range"
-                min="1"
-                max="10"
-                step="1"
-                value={modelConfig.k || 4}
-                onChange={(e) => handleConfigValueChange('k', parseInt(e.target.value))}
-                disabled={isGlobalConfigEnforced}
-                className="config-slider"
-              />
-              <p className="config-help">
-                Number of documents to retrieve for context
-              </p>
-            </div>
+            ))}
           </div>
         </section>
 
@@ -303,17 +58,17 @@ export default function SettingsPage({
 
           <div className="info-grid">
             <div className="info-card">
-              <h4>🔐 Security & Privacy</h4>
+              <h4><LockIcon style={{ width: 16, height: 16, verticalAlign: 'middle', marginRight: 6 }} /> Security & Privacy</h4>
               <p>Your API keys are stored locally in your browser. They are never sent to our servers and are only used for direct API calls to the providers.</p>
             </div>
 
             <div className="info-card">
-              <h4>⚙️ Configuration Impact</h4>
+              <h4><SettingsIcon style={{ width: 16, height: 16, verticalAlign: 'middle', marginRight: 6 }} /> Configuration Impact</h4>
               <p>Model configuration affects how the system retrieves documents and generates responses. Adjust these settings based on your use case and provider capabilities.</p>
             </div>
 
             <div className="info-card">
-              <h4>📊 Provider Comparison</h4>
+              <h4><BarChartIcon style={{ width: 16, height: 16, verticalAlign: 'middle', marginRight: 6 }} /> Provider Comparison</h4>
               <p>
                 <strong>Groq:</strong> Fast, free, great for RAG. 
                 <strong>Gemini:</strong> Advanced reasoning. 
@@ -322,7 +77,7 @@ export default function SettingsPage({
             </div>
 
             <div className="info-card">
-              <h4>💡 Tips</h4>
+              <h4><ZapIcon style={{ width: 16, height: 16, verticalAlign: 'middle', marginRight: 6 }} /> Tips</h4>
               <p>Start with Groq for free tier. Adjust temperature based on use case. Use higher K for comprehensive retrieval.</p>
             </div>
           </div>
@@ -361,7 +116,7 @@ export default function SettingsPage({
         .subtitle {
           margin: 8px 0 0 0;
           font-size: 14px;
-          color: #8E8B82;
+          color: #8b92a0;
         }
 
         .info-banner {
@@ -402,7 +157,7 @@ export default function SettingsPage({
         .section-description {
           margin: 0;
           font-size: 14px;
-          color: #8E8B82;
+          color: #8b92a0;
         }
 
         .settings-grid {
@@ -458,7 +213,7 @@ export default function SettingsPage({
         .provider-desc {
           margin: 0;
           font-size: 13px;
-          color: #8E8B82;
+          color: #8b92a0;
         }
 
         .input-group {
@@ -491,7 +246,7 @@ export default function SettingsPage({
 
         .input-group input:disabled {
           background: rgba(20, 20, 19, 0.04);
-          color: #8E8B82;
+          color: #8b92a0;
         }
 
         .action-btn {
@@ -503,6 +258,7 @@ export default function SettingsPage({
           font-size: 13px;
           transition: all 0.2s;
           white-space: nowrap;
+          color: #141413;
         }
 
         .action-btn:hover {
@@ -556,7 +312,7 @@ export default function SettingsPage({
         .config-select:disabled,
         .config-slider:disabled {
           background: rgba(20, 20, 19, 0.04);
-          color: #8E8B82;
+          color: #8b92a0;
           cursor: not-allowed;
         }
 
@@ -570,14 +326,14 @@ export default function SettingsPage({
           display: flex;
           justify-content: space-between;
           font-size: 11px;
-          color: #8E8B82;
+          color: #8b92a0;
           margin: 0 2px;
         }
 
         .config-help {
           margin: 0;
           font-size: 11px;
-          color: #8E8B82;
+          color: #8b92a0;
         }
 
         .info-grid {
@@ -606,7 +362,7 @@ export default function SettingsPage({
         .info-card p {
           margin: 0;
           font-size: 12px;
-          color: #8E8B82;
+          color: #8b92a0;
           line-height: 1.5;
         }
 

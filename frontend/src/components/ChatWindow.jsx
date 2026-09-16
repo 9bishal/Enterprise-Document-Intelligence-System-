@@ -1,59 +1,54 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { SendIcon, PlusIcon, ChatIcon } from './Icons';
+import { SendIcon, PlusIcon, ChatIcon, FileIcon, AlertTriangleIcon, ZapIcon, DollarIcon, ClockIcon, CpuIcon, CacheIcon, LayersIcon } from './Icons';
 
-// A simple and robust Markdown & Citation Parser
 function parseMarkdown(text, onCitationClick) {
   if (!text) return '';
   
   let formatted = text;
   
-  // 1. Escaping basic HTML to prevent injection
   formatted = formatted
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
     
-  // 2. Syntax code blocks ```code```
   formatted = formatted.replace(/```(.*?)\n([\s\S]*?)```/g, (match, lang, code) => {
     return `<pre><code class="language-${lang.trim() || 'txt'}">${code.trim()}</code></pre>`;
   });
   
-  // 3. Inline code `code`
   formatted = formatted.replace(/`([^`]+)`/g, '<code>$1</code>');
   
-  // 4. Bold text **text**
   formatted = formatted.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
   
-  // 5. Headings: ### H3, ## H2, # H1
   formatted = formatted.replace(/^### (.*?)$/gm, '<h3>$1</h3>');
   formatted = formatted.replace(/^## (.*?)$/gm, '<h2>$1</h2>');
   formatted = formatted.replace(/^# (.*?)$/gm, '<h1>$1</h1>');
   
-  // 6. Blockquotes > text
   formatted = formatted.replace(/^&gt; (.*?)$/gm, '<blockquote>$1</blockquote>');
   
-  // 7. Bullet lists - text or * text
   formatted = formatted.replace(/^[-*] (.*?)$/gm, '<li>$1</li>');
-  // Wrap li blocks in ul (simple approximation)
   formatted = formatted.replace(/(<li>.*<\/li>)/gs, '<ul>$1</ul>');
-  // De-duplicate nested uls if any
   formatted = formatted.replace(/<\/ul>\s*<ul>/g, '');
   
-  // 8. Paragraphs (lines split by double newlines)
   formatted = formatted.replace(/\n\n/g, '</p><p>');
-  // Wrap whole thing in paragraphs if not starting with block tags
   if (!formatted.startsWith('<h') && !formatted.startsWith('<pre') && !formatted.startsWith('<ul')) {
     formatted = '<p>' + formatted + '</p>';
   }
   
-  // 9. Citation tags [1], [2], [3]
-  // We match [number] and replace with interactive citation chips
   formatted = formatted.replace(/\[([1-9])\]/g, (match, num) => {
     const idx = parseInt(num) - 1;
-    return `<button class="citation-chip" data-index="${idx}">📄 [${num}]</button>`;
+    return `<button class="citation-chip" data-index="${idx}"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:3px;vertical-align:middle"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>[${num}]</button>`;
   });
   
   return formatted;
+}
+
+function costBadgeHTML(msg) {
+  if (msg.role !== 'assistant' || !msg.estimated_cost_usd) return '';
+  const cost = parseFloat(msg.estimated_cost_usd).toFixed(6);
+  const model = msg.model_used || '—';
+  const latency = msg.latency_ms || '—';
+  const cacheHit = msg.cache_hit ? 'Yes' : 'No';
+  return `<div class="msg-cost-badge"><svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg> $${cost} &nbsp;|&nbsp; <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> ${latency}ms &nbsp;|&nbsp; <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg> Cache: ${cacheHit} &nbsp;|&nbsp; <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"/><rect x="9" y="9" width="6" height="6"/></svg> ${model}</div>`;
 }
 
 export default function ChatWindow({
@@ -65,18 +60,17 @@ export default function ChatWindow({
   activeStep,
   loading,
   modelConfig,
-  onHighlightSource
+  onHighlightSource,
+  onCostData
 }) {
   const [input, setInput] = useState('');
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
 
-  // Auto-scroll to bottom of chat
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
-  // Handle auto-growing textarea
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = '24px';
@@ -85,7 +79,7 @@ export default function ChatWindow({
   }, [input]);
 
   const handleSend = () => {
-    if (!input.strip && input.trim() === '') return;
+    if (!input.trim()) return;
     onSendMessage(input.trim());
     setInput('');
   };
@@ -97,7 +91,6 @@ export default function ChatWindow({
     }
   };
 
-  // Intercept click events inside message bubbles to handle citation clicks
   const handleMessageBubbleClick = (e, msg) => {
     const citationBtn = e.target.closest('.citation-chip');
     if (citationBtn && msg.sources) {
@@ -108,11 +101,9 @@ export default function ChatWindow({
     }
   };
 
-  // Determine active session name
   const currentSession = sessions.find(s => s.id === activeSessionId);
   const sessionName = currentSession ? currentSession.name : 'New Assistant Chat';
 
-  // Translate LangGraph step to friendly display message
   const getStepDescription = (step) => {
     switch (step) {
       case 'retrieve':
@@ -130,9 +121,10 @@ export default function ChatWindow({
     }
   };
 
+  const lastAssistantMsg = messages.filter(m => m.role === 'assistant' && m.estimated_cost_usd).slice(-1)[0];
+
   return (
     <main className="chat-area glass-panel">
-      {/* Chat Header */}
       <div className="chat-header">
         <div className="session-info">
           <span className="session-title">{sessionName}</span>
@@ -148,7 +140,6 @@ export default function ChatWindow({
         </div>
       </div>
 
-      {/* Messages Stream */}
       <div className="messages-container">
         {messages.map((msg) => (
           <div className={`message-wrapper ${msg.role}`} key={msg.id}>
@@ -163,10 +154,15 @@ export default function ChatWindow({
                 dangerouslySetInnerHTML={{ __html: parseMarkdown(msg.content) }}
               />
               
-              {/* Citations block */}
+              {msg.role === 'assistant' && msg.estimated_cost_usd && (
+                <div
+                  className="msg-cost-badge"
+                  dangerouslySetInnerHTML={{ __html: costBadgeHTML(msg) }}
+                />
+              )}
+              
               {msg.role === 'assistant' && msg.sources && msg.sources.length > 0 && (
                 <div className="msg-sources">
-                  {/* Filter out audit documents for display */}
                   {(() => {
                     const realSources = msg.sources.filter(src => src.filename !== 'Repository Status Audit');
                     const auditSources = msg.sources.filter(src => src.filename === 'Repository Status Audit');
@@ -183,14 +179,18 @@ export default function ChatWindow({
                                 onClick={() => onHighlightSource(src.id)}
                                 title={`Similarity: ${src.similarity || 0}%`}
                               >
-                                📄 [{index + 1}] {src.filename} {src.page ? `(Page ${src.page})` : ''} - {Math.round(src.similarity || 0)}%
+                                <FileIcon style={{ width: 12, height: 12, marginRight: 4, verticalAlign: 'middle' }} />
+                                [{index + 1}] {src.filename} {src.page ? `(Page ${src.page})` : ''} - {Math.round(src.similarity || 0)}%
                               </button>
                             ))}
                           </>
                         )}
                         {auditSources.length > 0 && (
                           <>
-                            <div className="msg-source-title" style={{ marginTop: '12px', opacity: 0.7 }}>⚠️ Repository Status</div>
+                            <div className="msg-source-title" style={{ marginTop: '12px', opacity: 0.7 }}>
+                              <AlertTriangleIcon style={{ width: 12, height: 12, marginRight: 4, verticalAlign: 'middle', color: 'var(--accent)' }} />
+                              Repository Status
+                            </div>
                             <div style={{ fontSize: '12px', color: 'var(--text-secondary)', padding: '8px', backgroundColor: 'rgba(255, 165, 0, 0.1)', borderRadius: '4px' }}>
                               Limited matches found in indexed documents. Consider uploading additional documents for better results.
                             </div>
@@ -218,7 +218,6 @@ export default function ChatWindow({
           </div>
         )}
 
-        {/* Loading / Thinking indicator */}
         {loading && (
           <div className="message-wrapper assistant">
             <div className="msg-avatar">AI</div>
@@ -241,7 +240,6 @@ export default function ChatWindow({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Area */}
       <div className="chat-input-container">
         <div className="chat-input-wrapper">
           <textarea

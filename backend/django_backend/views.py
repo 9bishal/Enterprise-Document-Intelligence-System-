@@ -73,10 +73,10 @@ def analyze_document_classification_and_risks(filepath):
         res = call_llm_json(
             prompt=prompt,
             system_prompt="You are a precise corporate security compliance assistant. Return valid JSON only.",
-            provider="gemini", # default to gemini
+            provider="gemini",
             temperature=0.0
         )
-        
+
         classification = res.get("classification", "General")
         risk_status = res.get("risk_status", "Clean")
         risk_details = res.get("risk_details", "")
@@ -324,11 +324,7 @@ def get_admin_llm_config(request):
             "temperature": config.temperature,
             "k": config.k
         },
-        "api_keys": {
-            "groq": config.groq_api_key,
-            "gemini": config.gemini_api_key,
-            "openai": config.openai_api_key
-        }
+        "api_keys": config.masked_keys()
     })
 
 @api_view(['PUT'])
@@ -348,9 +344,12 @@ def update_admin_llm_config(request):
     if 'k' in cfg: config.k = cfg['k']
     
     keys = data.get("api_keys", {})
-    if "groq" in keys: config.groq_api_key = keys["groq"]
-    if "gemini" in keys: config.gemini_api_key = keys["gemini"]
-    if "openai" in keys: config.openai_api_key = keys["openai"]
+    if "groq" in keys and "*" not in keys["groq"]:
+        config.set_groq_key(keys["groq"])
+    if "gemini" in keys and "*" not in keys["gemini"]:
+        config.set_gemini_key(keys["gemini"])
+    if "openai" in keys and "*" not in keys["openai"]:
+        config.set_openai_key(keys["openai"])
         
     config.save()
     
@@ -410,7 +409,6 @@ def upload_document(request):
         target=process_document_indexing,
         args=(doc_id, filename, filepath, user_department)
     )
-    thread.daemon = True
     thread.start()
 
     return Response({
@@ -442,8 +440,18 @@ def get_documents_list(request):
     else:
         docs = Document.objects.filter(department=user_department).order_by("-created_at")
 
+    limit = int(request.GET.get('limit', 100))
+    offset = int(request.GET.get('offset', 0))
+    total = docs.count()
+    docs = docs[offset:offset + limit]
+
     serializer = DocumentSerializer(docs, many=True)
-    return Response(serializer.data)
+    return Response({
+        "results": serializer.data,
+        "total": total,
+        "limit": limit,
+        "offset": offset
+    })
 
 @api_view(['DELETE'])
 @permission_classes([IsEditorOrAbove])
@@ -591,9 +599,9 @@ def query_rag(request):
     llm_config = LLMConfig.objects.first()
     if llm_config and llm_config.enforce_globally:
         api_keys = {
-            "gemini": llm_config.gemini_api_key,
-            "openai": llm_config.openai_api_key,
-            "groq": llm_config.groq_api_key
+            "gemini": llm_config.get_gemini_key(),
+            "openai": llm_config.get_openai_key(),
+            "groq": llm_config.get_groq_key()
         }
         model_config = {
             "provider": llm_config.provider,
@@ -796,11 +804,9 @@ def admin_invite(request):
             "department": department
         })
     except Exception as e:
-        # Even if email fails, the OTP is saved so admin can relay it manually
-        print(f"SMTP email send error: {str(e)}")
+        print(f"SMTP email send error for {email}: {str(e)}")
         return Response({
-            "detail": f"Invitation created but email delivery failed. OTP: {otp}. Error: {str(e)}",
-            "otp": otp,
+            "detail": f"Invitation created but email delivery failed. Contact the new employee manually with their OTP.",
             "role": role,
             "department": department
         }, status=status.HTTP_207_MULTI_STATUS)
