@@ -72,10 +72,14 @@ document_intelligent_system/
 ## 🚀 Features
 
 ### Core Features
-- **📄 Document Management**: Upload, index, and organize documents by department
-- **🔍 Semantic Search**: RAG-powered search with context awareness
-- **💬 Chat Interface**: Real-time conversational interface with message history
-- **📊 RAG Pipeline Visualization**: See each step of the retrieval and generation process
+- **📄 Document Management**: Upload (single or batch up to 1000 files), index, preview, and organize documents by department
+- **🔍 Semantic Search**: Hybrid RAG (dense vectors + BM25 + RRF fusion + cross-encoder rerank) with true cosine similarity scores
+- **💬 Chat Interface**: Real-time token streaming (SSE) with paced visible stream-out, message history, and deep-linkable threads (`/query/:sessionId`)
+- **⚡ Fast Single-Call Pipeline**: 1 LLM call per query (no grading loops); semantic + prompt + embedding caches (Redis + RediSearch)
+- **🛡️ Deterministic Guards**: Greeting short-circuit, weak-grounding refusal (no LLM, no citations), cited-only source display, weak-grounding amber flag
+- **📊 RAG Pipeline Visualization**: Live stage tracing (retrieve → grade → generate) with real tokens, billed cost, latency, and cache status per answer
+- **📤 Answer Export**: Copy / download (.txt / .md) question + answer, native Share support
+- **🔄 Document Versioning**: Same-name re-upload supersedes v1 (chunks deleted, caches invalidated); byte-identical uploads skipped as duplicates; near-duplicate (≥85%) content supersedes by similarity
 - **🏢 Department Filtering**: Query documents from specific departments
 - **👤 Role-Based Access Control**: Admin, Editor, Viewer roles with granular permissions
 
@@ -88,17 +92,19 @@ document_intelligent_system/
 ### Backend Features
 - **REST API** with Django REST Framework
 - **JWT Authentication** for secure access
-- **Vector Database** (Chroma) for semantic search
-- **LLM Integration** with configurable API keys
-- **Department-based Classification** for documents
+- **Vector Database** (Chroma, department-scoped collections) for semantic search
+- **LLM Integration** (Groq / Gemini / OpenAI, admin-configured) with real provider-reported token usage and cost
+- **Streaming SSE endpoint** (`POST /api/chat/query/stream`: token / citations / done events)
+- **Department-based Classification** + LLM risk screening for documents
+- **Parallel ingestion** (2-worker pool, `INTRADOC_INDEX_WORKERS`) with batch upload endpoint
 - **SSL/TLS Support** for secure LLM API calls
 - **Pagination & Filtering** for document queries
 
 ### Admin Features
-- Document deletion with vector store cleanup
-- User management and access control
+- Document deletion with vector store cleanup, in-app preview
+- User management (invite, role/department update, delete with confirmation + full cleanup)
 - LLM configuration management
-- System metrics and analytics
+- System metrics and analytics (real tokens, cost, cache hits, latency, errors)
 
 ## 🛠️ Tech Stack
 
@@ -106,7 +112,7 @@ document_intelligent_system/
 - **Framework**: Django 4.x + Django REST Framework
 - **Database**: SQLite (with migration support)
 - **Vector DB**: Chroma (for semantic search)
-- **LLM**: OpenAI/Anthropic (configurable)
+- **LLM**: Groq / Gemini / OpenAI (admin-configured, bill-accurate usage)
 - **Authentication**: JWT tokens
 - **Language**: Python 3.10+
 
@@ -204,17 +210,20 @@ document_intelligent_system/
 - `GET /api/chat/sessions/{id}/messages` - Get session messages
 
 ### Chat Query
-- `POST /api/chat/query` - Send question and get RAG response
+- `POST /api/chat/query` - Send question and get RAG response (single LLM call)
+- `POST /api/chat/query/stream` - Same, streamed as SSE (`token` / `citations` / `done` with real tokens + cost)
 
 ### Documents
 - `GET /api/documents` - List documents
-- `POST /api/documents/upload` - Upload document
+- `POST /api/documents/upload` - Upload document (auto-supersedes same-name v1, skips byte-duplicates)
+- `POST /api/documents/upload/batch` - Upload up to 1000 files at once
+- `GET /api/documents/{id}/file` - Preview/download original file (inline, department-scoped)
 - `DELETE /api/documents/{id}` - Delete document (admin only)
-- `GET /api/documents/search` - Search documents
 
 ### Admin
-- `GET /api/admin/metrics` - System metrics
+- `GET /api/admin/metrics` - System metrics (real tokens, cost, cache hits, latency, errors, indexed docs)
 - `DELETE /api/admin/documents/{id}` - Admin document deletion
+- `DELETE /api/admin/users/{id}` - Delete user with confirmation (self-delete and last-admin protected)
 
 ## 🔐 Authentication
 
@@ -260,13 +269,24 @@ curl -X POST http://localhost:8000/api/chat/sessions \
 
 The system shows a visual representation of the RAG pipeline:
 
-1. **Document Retrieval** - Semantic search finds relevant documents
-2. **Context Processing** - Retrieved content is formatted
-3. **Prompt Engineering** - Context is added to user query
-4. **LLM Generation** - AI generates response
-5. **Source Attribution** - Sources are cited in response
+1. **Document Retrieval** - Hybrid search (dense + BM25 + RRF) finds top-k chunks with true cosine similarity
+2. **Deterministic Guards** - Greetings answered instantly; weak grounding (<20% top similarity) refused locally with zero LLM cost
+3. **LLM Generation** - Single streamed call answers in ≤5 short numbered points with inline `[1]`, `[2]` citations
+4. **Source Attribution** - Only cited sources displayed; borderline grounding flagged amber
+5. **Caching** - Repeat/paraphrased queries served from Redis semantic cache (~ms, zero LLM)
 
-Each step is tracked and displayed in real-time.
+Each step is traced live in the Execution Pipeline panel with real tokens, cost, latency, and cache status.
+
+## ⚙️ Tuning Flags (env vars)
+
+- `INTRADOC_FAST_PATH=1` - Single-call pipeline (0 = legacy grade/regenerate pipeline)
+- `INTRADOC_PLAIN_TEXT=1` - Plain-text answers, no markdown artefacts
+- `INTRADOC_SHORT_ANSWERS=1` - Max 5 numbered points per answer
+- `INTRADOC_MAX_TOKENS=512` - Output token cap (faster + cheaper)
+- `INTRADOC_MIN_SIMILARITY=20` - Weak-grounding refusal threshold (cosine %)
+- `INTRADOC_INDEX_WORKERS=2` - Parallel document indexing threads
+- `INTRADOC_DUP_SIM_THRESHOLD=0.85` - Near-duplicate supersede threshold
+- `INTRADOC_REDIS_URL` - Redis endpoint (must load the RediSearch module; `./start_redis.sh` handles it)
 
 ## 🔒 Security Features
 
@@ -357,5 +377,5 @@ For issues, questions, or suggestions:
 
 ---
 
-**Last Updated**: May 2026  
-**Version**: 1.0.0
+**Last Updated**: September 2026
+**Version**: 2.0.0
