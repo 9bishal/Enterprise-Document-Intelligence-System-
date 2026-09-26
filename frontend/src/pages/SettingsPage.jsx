@@ -1,54 +1,291 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { SettingsIcon, LockIcon, BarChartIcon, ZapIcon, CpuIcon } from '../components/Icons';
-import { TIER_LABELS } from '../utils/constants';
+import { SettingsIcon, ShieldIcon, LockIcon, BarChartIcon, ZapIcon, CopyIcon, CheckIcon } from '../components/Icons';
+import { PROVIDER_MODELS } from '../utils/constants';
 
 export default function SettingsPage({
+  API_BASE,
+  apiKeys,
+  handleApiKeyChange,
+  modelConfig,
+  setModelConfig,
+  isGlobalConfigEnforced,
   userRole
 }) {
   const navigate = useNavigate();
+  const [copyFeedback, setCopyFeedback] = useState({});
+  
+  // Only Admins can see and configure API keys
   const isAdmin = userRole === 'Admin';
+
+  const providerModels = PROVIDER_MODELS;
+
+  const handleProviderChange = (e) => {
+    const provider = e.target.value;
+    const defaultModel = providerModels[provider][0].id;
+    setModelConfig({
+      ...modelConfig,
+      provider,
+      model: defaultModel
+    });
+  };
+
+  const handleConfigValueChange = (key, val) => {
+    setModelConfig({
+      ...modelConfig,
+      [key]: val
+    });
+  };
+
+  const handleCopyToClipboard = (text, key) => {
+    navigator.clipboard.writeText(text);
+    setCopyFeedback({ ...copyFeedback, [key]: true });
+    setTimeout(() => {
+      setCopyFeedback({ ...copyFeedback, [key]: false });
+    }, 2000);
+  };
 
   return (
     <div className="settings-page">
       {/* Header */}
       <div className="settings-header">
         <div className="header-content">
-          <SettingsIcon style={{ width: 28, height: 28, color: '#030712' }} />
+          <SettingsIcon style={{ width: 28, height: 28, color: '#111111' }} />
           <div>
             <h1>System Configuration</h1>
-            <p className="subtitle">Configuration is managed by your administrator</p>
+            <p className="subtitle">Configure LLM providers, API keys, and model parameters</p>
           </div>
         </div>
-        <button onClick={() => navigate('/query')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}><h1>Back to Workspace</h1></button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {isAdmin && (
+            <button onClick={() => navigate('/admin')} className="admin-console-btn" title="Open Admin Console">
+              <ShieldIcon style={{ width: 16, height: 16, verticalAlign: 'middle', marginRight: 6 }} />
+              Admin Console
+            </button>
+          )}
+          <button onClick={() => navigate('/query')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}><h1>Back to Workspace</h1></button>
+        </div>
       </div>
 
+      {/* Global Config Warning */}
+      {isGlobalConfigEnforced && (
+        <div className="info-banner">
+<ShieldIcon style={{ width: 16, height: 16, verticalAlign: 'middle' }} />
+          <p>Global configuration is enforced by your administrator. Local settings are read-only.</p>
+        </div>
+      )}
+
       <div className="settings-container">
-        {!isAdmin && (
-          <section className="settings-section" style={{ border: '1px solid rgba(20, 20, 19, 0.15)', borderRadius: '8px', padding: '24px', backgroundColor: 'rgba(100, 120, 160, 0.04)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <LockIcon style={{ width: 20, height: 20, color: '#8E8B82' }} />
+        {/* API Keys Section - Only visible to Admins */}
+        {isAdmin ? (
+        <section className="settings-section">
+          <h2 className="section-title">API Keys & Credentials</h2>
+          <p className="section-description">
+            Provide API keys for the LLM providers you want to use. Keys are stored locally in your browser.
+          </p>
+
+          <div className="settings-grid">
+            {/* Groq */}
+            <div className="settings-card">
+              <div className="card-header">
+                <h3>Groq</h3>
+                <span className="badge free">Free</span>
+              </div>
+              <p className="provider-desc">Fast inference API with Llama and Mixtral models</p>
+              <div className="input-group">
+                <label>API Key</label>
+                <div className="input-with-action">
+                  <input
+                    type="password"
+                    placeholder="gsk_..."
+                    value={apiKeys.groq || ''}
+                    onChange={(e) => handleApiKeyChange('groq', e.target.value)}
+                    disabled={isGlobalConfigEnforced}
+                  />
+                  {apiKeys.groq && (
+                    <button
+                      className="action-btn"
+                      onClick={() => handleCopyToClipboard(apiKeys.groq, 'groq')}
+                      title="Copy to clipboard"
+                    >
+                      {copyFeedback.groq ? <CheckIcon style={{ width: 14, height: 14, color: '#15803d' }} /> : <CopyIcon style={{ width: 14, height: 14 }} />}
+                    </button>
+                  )}
+                </div>
+                <a href="https://console.groq.com" target="_blank" rel="noopener noreferrer" className="link">
+                  Get free API key →
+                </a>
+              </div>
+            </div>
+
+            {/* Gemini */}
+            <div className="settings-card">
+              <div className="card-header">
+                <h3>Google Gemini</h3>
+                <span className="badge free">Free Tier</span>
+              </div>
+              <p className="provider-desc">Advanced reasoning with Google's latest models</p>
+              <div className="input-group">
+                <label>API Key</label>
+                <div className="input-with-action">
+                  <input
+                    type="password"
+                    placeholder="AIza..."
+                    value={apiKeys.gemini || ''}
+                    onChange={(e) => handleApiKeyChange('gemini', e.target.value)}
+                    disabled={isGlobalConfigEnforced}
+                  />
+                  {apiKeys.gemini && (
+                    <button
+                      className="action-btn"
+                      onClick={() => handleCopyToClipboard(apiKeys.gemini, 'gemini')}
+                      title="Copy to clipboard"
+                    >
+                      {copyFeedback.gemini ? <CheckIcon style={{ width: 14, height: 14, color: '#15803d' }} /> : <CopyIcon style={{ width: 14, height: 14 }} />}
+                    </button>
+                  )}
+                </div>
+                <a href="https://makersuite.google.com" target="_blank" rel="noopener noreferrer" className="link">
+                  Get free API key →
+                </a>
+              </div>
+            </div>
+
+            {/* OpenAI */}
+            <div className="settings-card">
+              <div className="card-header">
+                <h3>OpenAI</h3>
+                <span className="badge paid">Paid</span>
+              </div>
+              <p className="provider-desc">GPT-4o and other advanced models</p>
+              <div className="input-group">
+                <label>API Key</label>
+                <div className="input-with-action">
+                  <input
+                    type="password"
+                    placeholder="sk-..."
+                    value={apiKeys.openai || ''}
+                    onChange={(e) => handleApiKeyChange('openai', e.target.value)}
+                    disabled={isGlobalConfigEnforced}
+                  />
+                  {apiKeys.openai && (
+                    <button
+                      className="action-btn"
+                      onClick={() => handleCopyToClipboard(apiKeys.openai, 'openai')}
+                      title="Copy to clipboard"
+                    >
+                      {copyFeedback.openai ? <CheckIcon style={{ width: 14, height: 14, color: '#15803d' }} /> : <CopyIcon style={{ width: 14, height: 14 }} />}
+                    </button>
+                  )}
+                </div>
+                <a href="https://platform.openai.com" target="_blank" rel="noopener noreferrer" className="link">
+                  Get API key →
+                </a>
+              </div>
+            </div>
+          </div>
+        </section>
+        ) : (
+          <section className="settings-section" style={{ border: '1px solid var(--border)', borderRadius: '8px', padding: '24px', backgroundColor: 'rgba(0, 0, 0, 0.02)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', color: 'var(--text-muted)' }}>
+              <LockIcon style={{ width: 20, height: 20 }} />
               <div>
-                <h3 style={{ margin: '0 0 4px 0', color: '#141413', fontSize: '15px', fontWeight: 600 }}>Managed by Administrator</h3>
-                <p style={{ margin: '0', fontSize: '13px', color: '#8E8B82' }}>LLM provider, model, API keys, and all configuration settings are managed by your administrator. Contact your admin for any changes.</p>
+                <h3 style={{ margin: '0 0 4px 0', color: '#111111' }}>API Keys & Credentials</h3>
+                <p style={{ margin: '0', fontSize: '13px' }}>API key management is restricted to administrators only. Contact your admin to configure API keys.</p>
               </div>
             </div>
           </section>
         )}
 
-        {/* Tier Legend */}
+        {/* Model Configuration Section */}
         <section className="settings-section">
-          <h2 className="section-title">Model Tiers</h2>
+          <h2 className="section-title">Model Configuration</h2>
           <p className="section-description">
-            Models are grouped by capability and cost to help you choose the right balance.
+            Choose your preferred LLM provider and configure model parameters
           </p>
-          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-            {Object.entries(TIER_LABELS).map(([key, t]) => (
-              <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', background: t.bg, borderRadius: 8, border: '1px solid transparent' }}>
-                <CpuIcon style={{ width: 14, height: 14, color: t.color }} />
-                <span style={{ fontSize: 13, fontWeight: 600, color: t.color }}>{t.label}</span>
+
+          <div className="config-grid">
+            {/* Provider Selection */}
+            <div className="config-card">
+              <label className="config-label">LLM Provider</label>
+              <select
+                value={modelConfig.provider || 'groq'}
+                onChange={handleProviderChange}
+                disabled={isGlobalConfigEnforced}
+                className="config-select"
+              >
+                <option value="groq">Groq (Free, Fast)</option>
+                <option value="gemini">Google Gemini</option>
+                <option value="openai">OpenAI</option>
+                <option value="ollama">Ollama (Local)</option>
+              </select>
+              <p className="config-help">
+                Select the LLM provider to use for query responses
+              </p>
+            </div>
+
+            {/* Model Selection */}
+            <div className="config-card">
+              <label className="config-label">Model</label>
+              <select
+                value={modelConfig.model || ''}
+                onChange={(e) => handleConfigValueChange('model', e.target.value)}
+                disabled={isGlobalConfigEnforced}
+                className="config-select"
+              >
+                {(providerModels[modelConfig.provider] || []).map(m => (
+                  <option key={m.id} value={m.id}>{m.name}</option>
+                ))}
+              </select>
+              <p className="config-help">
+                Choose the specific model variant
+              </p>
+            </div>
+
+            {/* Temperature */}
+            <div className="config-card">
+              <label className="config-label">
+                Temperature: {modelConfig.temperature || 0.3}
+              </label>
+              <input
+                type="range"
+                min="0"
+                max="2"
+                step="0.1"
+                value={modelConfig.temperature || 0.3}
+                onChange={(e) => handleConfigValueChange('temperature', parseFloat(e.target.value))}
+                disabled={isGlobalConfigEnforced}
+                className="config-slider"
+              />
+              <div className="slider-labels">
+                <span>Precise</span>
+                <span>Balanced</span>
+                <span>Creative</span>
               </div>
-            ))}
+              <p className="config-help">
+                Lower = more precise, Higher = more creative
+              </p>
+            </div>
+
+            {/* Top K */}
+            <div className="config-card">
+              <label className="config-label">
+                Top K (Retrieval): {modelConfig.k || 4}
+              </label>
+              <input
+                type="range"
+                min="1"
+                max="10"
+                step="1"
+                value={modelConfig.k || 4}
+                onChange={(e) => handleConfigValueChange('k', parseInt(e.target.value))}
+                disabled={isGlobalConfigEnforced}
+                className="config-slider"
+              />
+              <p className="config-help">
+                Number of documents to retrieve for context
+              </p>
+            </div>
           </div>
         </section>
 
@@ -110,13 +347,33 @@ export default function SettingsPage({
           margin: 0;
           font-size: 28px;
           font-weight: 700;
-          color: #141413;
+          color: #111111;
         }
 
         .subtitle {
           margin: 8px 0 0 0;
           font-size: 14px;
-          color: #8b92a0;
+          color: #9ca3af;
+        }
+
+        .admin-console-btn {
+          padding: 10px 16px;
+          background: #111111;
+          color: #ffffff;
+          border: 1px solid #111111;
+          border-radius: 8px;
+          font-size: 13px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.2s;
+          white-space: nowrap;
+        }
+
+        .admin-console-btn:hover {
+          background: #333333;
+          border-color: #333333;
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
         }
 
         .info-banner {
@@ -124,10 +381,10 @@ export default function SettingsPage({
           align-items: center;
           gap: 12px;
           padding: 12px 16px;
-          background: rgba(100, 120, 150, 0.1);
-          border: 1px solid rgba(100, 120, 150, 0.3);
+          background: rgba(0, 0, 0, 0.04);
+          border: 1px solid rgba(0, 0, 0, 0.12);
           border-radius: 8px;
-          color: #6478A0;
+          color: #525252;
           font-size: 13px;
         }
 
@@ -151,13 +408,13 @@ export default function SettingsPage({
           margin: 0;
           font-size: 20px;
           font-weight: 700;
-          color: #141413;
+          color: #111111;
         }
 
         .section-description {
           margin: 0;
           font-size: 14px;
-          color: #8b92a0;
+          color: #9ca3af;
         }
 
         .settings-grid {
@@ -168,7 +425,7 @@ export default function SettingsPage({
 
         .settings-card {
           background: white;
-          border: 1px solid rgba(20, 20, 19, 0.08);
+          border: 1px solid rgba(0, 0, 0, 0.08);
           border-radius: 12px;
           padding: 20px;
           display: flex;
@@ -187,7 +444,7 @@ export default function SettingsPage({
           margin: 0;
           font-size: 16px;
           font-weight: 700;
-          color: #141413;
+          color: #111111;
         }
 
         .badge {
@@ -201,19 +458,19 @@ export default function SettingsPage({
         }
 
         .badge.free {
-          background: rgba(100, 150, 100, 0.2);
-          color: #648F64;
+          background: rgba(21, 128, 61, 0.12);
+          color: #15803d;
         }
 
         .badge.paid {
-          background: rgba(150, 120, 50, 0.2);
-          color: #9A7832;
+          background: rgba(180, 83, 9, 0.12);
+          color: #b45309;
         }
 
         .provider-desc {
           margin: 0;
           font-size: 13px;
-          color: #8b92a0;
+          color: #9ca3af;
         }
 
         .input-group {
@@ -225,7 +482,7 @@ export default function SettingsPage({
         .input-group label {
           font-size: 12px;
           font-weight: 600;
-          color: #141413;
+          color: #111111;
         }
 
         .input-with-action {
@@ -237,43 +494,53 @@ export default function SettingsPage({
         .input-group input {
           flex: 1;
           padding: 8px 12px;
-          border: 1px solid rgba(20, 20, 19, 0.15);
+          border: 1px solid rgba(0, 0, 0, 0.15);
           border-radius: 6px;
           font-size: 13px;
-          color: #141413;
+          color: #111111;
           font-family: monospace;
         }
 
+        .input-group input:focus {
+          outline: none;
+          border-color: #111111;
+          box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.08);
+        }
+
         .input-group input:disabled {
-          background: rgba(20, 20, 19, 0.04);
-          color: #8b92a0;
+          background: rgba(0, 0, 0, 0.04);
+          color: #9ca3af;
         }
 
         .action-btn {
           padding: 6px 10px;
-          background: rgba(3, 7, 18, 0.06);
-          border: 1px solid rgba(3, 7, 18, 0.15);
+          background: rgba(0, 0, 0, 0.06);
+          border: 1px solid rgba(0, 0, 0, 0.15);
           border-radius: 4px;
           cursor: pointer;
           font-size: 13px;
+          color: #111111;
           transition: all 0.2s;
           white-space: nowrap;
-          color: #141413;
+          display: flex;
+          align-items: center;
+          justify-content: center;
         }
 
         .action-btn:hover {
-          background: rgba(3, 7, 18, 0.12);
+          background: rgba(0, 0, 0, 0.12);
+          border-color: rgba(0, 0, 0, 0.3);
         }
 
         .link {
           font-size: 11px;
-          color: #6478A0;
+          color: #525252;
           text-decoration: none;
           transition: color 0.2s;
         }
 
         .link:hover {
-          color: #030712;
+          color: #111111;
           text-decoration: underline;
         }
 
@@ -285,7 +552,7 @@ export default function SettingsPage({
 
         .config-card {
           background: white;
-          border: 1px solid rgba(20, 20, 19, 0.08);
+          border: 1px solid rgba(0, 0, 0, 0.08);
           border-radius: 12px;
           padding: 16px;
           display: flex;
@@ -296,23 +563,30 @@ export default function SettingsPage({
         .config-label {
           font-size: 13px;
           font-weight: 600;
-          color: #141413;
+          color: #111111;
         }
 
         .config-select,
         .config-slider {
           padding: 8px 12px;
-          border: 1px solid rgba(20, 20, 19, 0.15);
+          border: 1px solid rgba(0, 0, 0, 0.15);
           border-radius: 6px;
           font-size: 13px;
-          color: #141413;
+          color: #111111;
           background: white;
+          transition: all 0.2s;
+        }
+
+        .config-select:focus {
+          outline: none;
+          border-color: #111111;
+          box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.08);
         }
 
         .config-select:disabled,
         .config-slider:disabled {
-          background: rgba(20, 20, 19, 0.04);
-          color: #8b92a0;
+          background: rgba(0, 0, 0, 0.04);
+          color: #9ca3af;
           cursor: not-allowed;
         }
 
@@ -320,20 +594,21 @@ export default function SettingsPage({
           height: 6px;
           padding: 0;
           cursor: pointer;
+          accent-color: #111111;
         }
 
         .slider-labels {
           display: flex;
           justify-content: space-between;
           font-size: 11px;
-          color: #8b92a0;
+          color: #9ca3af;
           margin: 0 2px;
         }
 
         .config-help {
           margin: 0;
           font-size: 11px;
-          color: #8b92a0;
+          color: #9ca3af;
         }
 
         .info-grid {
@@ -343,8 +618,8 @@ export default function SettingsPage({
         }
 
         .info-card {
-          background: rgba(3, 7, 18, 0.03);
-          border: 1px solid rgba(3, 7, 18, 0.08);
+          background: rgba(0, 0, 0, 0.03);
+          border: 1px solid rgba(0, 0, 0, 0.08);
           border-radius: 8px;
           padding: 16px;
           display: flex;
@@ -356,13 +631,13 @@ export default function SettingsPage({
           margin: 0;
           font-size: 13px;
           font-weight: 700;
-          color: #141413;
+          color: #111111;
         }
 
         .info-card p {
           margin: 0;
           font-size: 12px;
-          color: #8b92a0;
+          color: #9ca3af;
           line-height: 1.5;
         }
 

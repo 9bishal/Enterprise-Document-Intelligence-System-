@@ -1,5 +1,4 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
-import { XCircleIcon } from './Icons';
 
 const ToastContext = createContext(null);
 
@@ -31,14 +30,14 @@ export function ToastProvider({ children }) {
           <div key={t.id} style={{
             display: 'flex', alignItems: 'center', gap: 10,
             padding: '12px 16px', borderRadius: 10,
-            background: t.type === 'error' ? '#FEF2F2' : t.type === 'success' ? '#F0FDF4' : '#F8FAFC',
-            border: `1px solid ${t.type === 'error' ? '#FECACA' : t.type === 'success' ? '#BBF7D0' : '#E2E8F0'}`,
-            color: t.type === 'error' ? '#991B1B' : t.type === 'success' ? '#166534' : '#1E293B',
+            background: t.type === 'error' ? '#FEF2F2' : t.type === 'success' ? '#F0FDF4' : '#ffffff',
+            border: `1px solid ${t.type === 'error' ? '#FECACA' : t.type === 'success' ? '#BBF7D0' : 'rgba(0,0,0,0.12)'}`,
+            color: t.type === 'error' ? '#991B1B' : t.type === 'success' ? '#166534' : '#111111',
             fontSize: 13, fontWeight: 500, boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
             maxWidth: 360, cursor: 'pointer'
           }} onClick={() => removeToast(t.id)}>
             <span style={{ flex: 1 }}>{t.message}</span>
-            <XCircleIcon style={{ width: 12, height: 12, opacity: 0.5 }} />
+            <span style={{ opacity: 0.5, fontSize: 11 }}>✕</span>
           </div>
         ))}
       </div>

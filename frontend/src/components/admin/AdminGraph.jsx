@@ -8,11 +8,11 @@ export default function AdminGraph({ graphData }) {
     <div className="admin-scrollable" style={{ paddingBottom: 0 }}>
       <div className="glass-panel" style={{ ...styles.card, height: 'calc(100vh - 180px)', display: 'flex', flexDirection: 'column' }}>
         <h3 style={styles.cardTitle}><NetworkIcon style={{ width: 16, height: 16, verticalAlign: 'middle', marginRight: 6 }} /> Enterprise Knowledge Graph</h3>
-        <p style={{ fontSize: '12px', color: '#8E8B82', marginBottom: '16px' }}>
+        <p style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '16px' }}>
           Visual mapping of isolated multi-tenant vector stores across departments.
         </p>
         
-        <div style={{ flex: 1, backgroundColor: '#FAF9F5', borderRadius: '12px', overflow: 'hidden', position: 'relative' }}>
+        <div style={{ flex: 1, backgroundColor: '#fafafa', borderRadius: '12px', overflow: 'hidden', position: 'relative' }}>
           <KnowledgeGraphVisualizer data={graphData} />
         </div>
       </div>

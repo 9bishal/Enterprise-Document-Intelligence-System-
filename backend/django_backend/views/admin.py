@@ -70,12 +70,9 @@ def update_admin_llm_config(request):
     if 'k' in cfg: config.k = cfg['k']
     
     keys = data.get("api_keys", {})
-    if "groq" in keys and "*" not in keys["groq"]:
-        config.set_groq_key(keys["groq"])
-    if "gemini" in keys and "*" not in keys["gemini"]:
-        config.set_gemini_key(keys["gemini"])
-    if "openai" in keys and "*" not in keys["openai"]:
-        config.set_openai_key(keys["openai"])
+    if "groq" in keys: config.set_groq_key(keys["groq"])
+    if "gemini" in keys: config.set_gemini_key(keys["gemini"])
+    if "openai" in keys: config.set_openai_key(keys["openai"])
         
     config.save()
     
@@ -129,10 +126,25 @@ def admin_metrics(request):
         "created_at": d.created_at.isoformat()
     } for d in flagged_docs]
     
-    # Estimated tokens based on character counts / 4
-    total_chars_agg = ChatMessage.objects.aggregate(total=models.Sum(models.functions.Length('content')))
-    total_chars = total_chars_agg['total'] or 0
-    estimated_tokens = int(total_chars / 4)
+    # Real LLM Telemetry
+    assistant_msgs = ChatMessage.objects.filter(role="assistant")
+    total_responses = assistant_msgs.count()
+    
+    telemetry = assistant_msgs.aggregate(
+        total_cost=models.Sum('estimated_cost_usd'),
+        total_latency=models.Sum('latency_ms'),
+        in_tokens=models.Sum('input_tokens'),
+        out_tokens=models.Sum('output_tokens')
+    )
+    
+    total_cost = telemetry['total_cost'] or 0.0
+    avg_latency = (telemetry['total_latency'] or 0) / total_responses if total_responses > 0 else 0
+    total_tokens = (telemetry['in_tokens'] or 0) + (telemetry['out_tokens'] or 0)
+    
+    cache_hits = assistant_msgs.filter(cache_hit=True).count()
+    error_responses = assistant_msgs.filter(
+        models.Q(model_used='error') | models.Q(content__startswith='HTTP Error') | models.Q(content__startswith='Error')
+    ).count()
     
     # Recent activities
     recent_activity_list = []
@@ -166,7 +178,12 @@ def admin_metrics(request):
             "total_chunks": total_chunks,
             "total_file_size": total_file_size,
             "total_sessions": total_sessions,
-            "estimated_tokens": estimated_tokens
+            "total_tokens": total_tokens,
+            "total_cost": total_cost,
+            "cache_hits": cache_hits,
+            "total_responses": total_responses,
+            "avg_latency": int(avg_latency),
+            "error_responses": error_responses
         },
         "users": users_list,
         "classification_distribution": class_dist_map,

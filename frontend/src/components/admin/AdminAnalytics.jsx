@@ -6,7 +6,11 @@ import { API_BASE, safeLocalStorage } from '../../utils/constants';
 const storage = safeLocalStorage();
 
 export default function AdminAnalytics({ metrics }) {
-  const { total_users, total_documents, total_chunks, estimated_tokens } = metrics.metrics;
+  const { 
+    total_users, total_documents, total_chunks, 
+    total_tokens, total_cost, cache_hits, 
+    total_responses, avg_latency, error_responses 
+  } = metrics.metrics;
   const [deletingDocId, setDeletingDocId] = useState(null);
 
   const handleDeleteDocument = async (docId, docName) => {
@@ -42,11 +46,17 @@ export default function AdminAnalytics({ metrics }) {
 
   return (
     <div className="admin-scrollable">
-      <div className="metrics-grid" style={styles.metricsGrid}>
+      <div className="metrics-grid" style={{ ...styles.metricsGrid, gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' }}>
         <MetricCard title="Total Users" value={total_users} />
         <MetricCard title="Indexed Documents" value={total_documents} />
         <MetricCard title="Vector Chunks" value={total_chunks} />
-        <MetricCard title="Est. Processed Tokens" value={`${(estimated_tokens / 1000).toFixed(1)}k`} />
+        <MetricCard title="Total Tokens" value={`${(total_tokens / 1000).toFixed(1)}k`} />
+        
+        <MetricCard title="Total LLM Cost" value={`$${(total_cost || 0).toFixed(4)}`} />
+        <MetricCard title="Total Responses" value={total_responses} />
+        <MetricCard title="Cache Hits" value={cache_hits} />
+        <MetricCard title="Avg Latency" value={`${avg_latency} ms`} />
+        <MetricCard title="HTTP Errors" value={error_responses} />
       </div>
 
       <div style={styles.twoColumnGrid}>
@@ -54,7 +64,7 @@ export default function AdminAnalytics({ metrics }) {
         <div className="glass-panel" style={styles.card}>
           <h3 style={styles.cardTitle}><AlertTriangleIcon style={{ width: 16, height: 16, verticalAlign: 'middle', marginRight: 6, color: 'var(--accent)' }} /> Security & Compliance Flags</h3>
           {metrics.flagged_documents.length === 0 ? (
-            <p style={{ fontSize: '13px', color: '#8E8B82' }}>No compliance risks detected in current index.</p>
+            <p style={{ fontSize: '13px', color: '#9ca3af' }}>No compliance risks detected in current index.</p>
           ) : (
             <div style={styles.list}>
               {metrics.flagged_documents.map(d => (
@@ -77,7 +87,7 @@ export default function AdminAnalytics({ metrics }) {
           <div style={styles.distGrid}>
             {Object.entries(metrics.classification_distribution).map(([category, count]) => (
               <div key={category} style={styles.distRow}>
-                <span style={{ fontSize: '13px', color: '#5C5A55' }}>{category}</span>
+                <span style={{ fontSize: '13px', color: '#525252' }}>{category}</span>
                 <span style={{ fontSize: '14px', fontWeight: '600' }}>{count}</span>
               </div>
             ))}
@@ -88,7 +98,7 @@ export default function AdminAnalytics({ metrics }) {
       {/* Vector Database Documents */}
       <div className="glass-panel" style={{ ...styles.card, marginTop: '24px' }}>
         <h3 style={styles.cardTitle}><DatabaseIcon style={{ width: 16, height: 16, verticalAlign: 'middle', marginRight: 6 }} /> Vector Database - Indexed Documents</h3>
-        <p style={{ fontSize: '12px', color: '#8E8B82', marginBottom: '16px' }}>
+        <p style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '16px' }}>
           Complete list of documents currently available in the vector database for RAG retrieval
         </p>
         {metrics.indexed_documents && metrics.indexed_documents.length > 0 ? (
@@ -98,7 +108,7 @@ export default function AdminAnalytics({ metrics }) {
                 <div style={styles.listHeader}>
                     <span style={styles.itemTitle}><FileIcon style={{ width: 14, height: 14, verticalAlign: 'middle', marginRight: 4 }} /> {doc.filename}</span>
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    <span style={{ fontSize: '11px', fontWeight: '600', color: '#648F64', background: 'rgba(100, 150, 100, 0.15)', padding: '4px 8px', borderRadius: '4px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: '600', color: '#15803d', background: 'rgba(21, 128, 61, 0.12)', padding: '4px 8px', borderRadius: '4px' }}>
                       {doc.status}
                     </span>
                     <button
@@ -106,9 +116,9 @@ export default function AdminAnalytics({ metrics }) {
                       disabled={deletingDocId === doc.id}
                       style={{
                         padding: '4px 8px',
-                        background: deletingDocId === doc.id ? 'rgba(200, 50, 50, 0.3)' : 'rgba(200, 50, 50, 0.15)',
-                        color: '#C83232',
-                        border: '1px solid rgba(200, 50, 50, 0.3)',
+                        background: deletingDocId === doc.id ? 'rgba(220, 38, 38, 0.3)' : 'rgba(220, 38, 38, 0.12)',
+                        color: '#dc2626',
+                        border: '1px solid rgba(220, 38, 38, 0.3)',
                         borderRadius: '4px',
                         fontSize: '11px',
                         fontWeight: '600',
@@ -127,7 +137,7 @@ export default function AdminAnalytics({ metrics }) {
             ))}
           </div>
         ) : (
-          <p style={{ fontSize: '13px', color: '#8E8B82' }}>No documents indexed in vector database yet.</p>
+          <p style={{ fontSize: '13px', color: '#9ca3af' }}>No documents indexed in vector database yet.</p>
         )}
       </div>
 

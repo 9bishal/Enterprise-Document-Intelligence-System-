@@ -1,19 +1,42 @@
 import os
 import time
-from typing import Optional
+from typing import Any, Optional
 
 from redisvl.extensions.cache.llm import SemanticCache
-from redisvl.utils.vectorize import HFTextVectorizer
+from redisvl.utils.vectorize.base import BaseVectorizer
 
 from .config import CACHE_SPECS, REDIS_URL, SEMANTIC_SIMILARITY_THRESHOLD, CacheType
 from .metrics import CACHE_HITS, CACHE_LATENCY, CACHE_MISSES, CACHE_SET_TOTAL
 
 EMBEDDING_MODEL_NAME = os.getenv("INTRADOC_EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
+EMBEDDING_DIM = int(os.getenv("INTRADOC_EMBEDDING_DIM", "384"))
+
+
+class _SharedVectorizer(BaseVectorizer):
+    """Valid redisvl vectorizer reusing the single embedding model from
+    app.vector_store, so we never load a second copy in the same process
+    (avoids OOM crashes). Satisfies redisvl>=0.23 BaseVectorizer contract."""
+
+    model: str = EMBEDDING_MODEL_NAME
+    dims: int = EMBEDDING_DIM
+
+    def _embed(self, text: Any = "", content: Any = "", **kwargs) -> list[float]:
+        from app.vector_store import embeddings_model as _shared_model
+        return [float(x) for x in _shared_model.embed_query(content or text)]
+
+    def _embed_many(self, texts: Any = None, contents: Any = None, **kwargs) -> list[list[float]]:
+        from app.vector_store import embeddings_model as _shared_model
+        items = list(contents or texts or [])
+        return [[float(x) for x in e] for e in _shared_model.embed_documents(items)]
+
+
+def _shared_vectorizer():
+    return _SharedVectorizer(model=EMBEDDING_MODEL_NAME, dims=EMBEDDING_DIM)
 
 def _build_backend():
     ttl = CACHE_SPECS[CacheType.SEMANTIC_RESPONSE].ttl_seconds or None
     distance_threshold = round(1 - SEMANTIC_SIMILARITY_THRESHOLD, 4)
-    vectorizer = HFTextVectorizer(model=EMBEDDING_MODEL_NAME)
+    vectorizer = _shared_vectorizer()
     return SemanticCache(
         name="intradoc_semantic_cache",
         redis_url=REDIS_URL,

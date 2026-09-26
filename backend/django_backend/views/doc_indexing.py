@@ -1,5 +1,6 @@
 import os
 import hashlib
+import threading
 from django_backend.models import Document
 from app.vector_store import index_document
 
@@ -55,11 +56,16 @@ def analyze_document_classification_and_risks(filepath):
         }}
         """
         
-        from app.llm_helper import call_llm_json
+        from app.llm_helper import call_llm_json, resolve_llm_config
+        llm_cfg = resolve_llm_config()
+        if not llm_cfg:
+            return "General", "Clean", ""
         res = call_llm_json(
             prompt=prompt,
             system_prompt="You are a precise corporate security compliance assistant. Return valid JSON only.",
-            provider="gemini", # default to gemini
+            provider=llm_cfg["provider"],
+            api_key=llm_cfg["api_key"],
+            model_name=llm_cfg["model"],
             temperature=0.0
         )
         
@@ -86,10 +92,28 @@ def process_document_indexing(doc_id, filename, filepath, department='General'):
                 return
             _fingerprint_cache.set_fingerprint(doc_id, content_hash)
 
-        # 1. Run AI classification and risk screening
-        classification, risk_status, risk_details = analyze_document_classification_and_risks(filepath)
-        
-        # 2. Map department to classification if needed
+        # 1. Run AI classification and risk screening IN PARALLEL with indexing.
+        #    Classification is network-bound (LLM call), indexing is compute-bound
+        #    (embedding), so overlapping them makes total time ~max() not the sum.
+        classify_result = {}
+        def _classify():
+            try:
+                classify_result["value"] = analyze_document_classification_and_risks(filepath)
+            except Exception as e:
+                classify_result["value"] = ("General", "Clean", f"Analysis error: {str(e)}")
+        classify_thread = threading.Thread(target=_classify, daemon=True)
+        classify_thread.start()
+
+        # 2. Ingest document text chunks into department-scoped vector store
+        chunk_count = index_document(doc_id, filename, filepath, department=department)
+
+        # 3. Wait for classification to finish (already overlapped with embedding)
+        classify_thread.join(timeout=90)
+        classification, risk_status, risk_details = classify_result.get(
+            "value", ("General", "Clean", "")
+        )
+
+        # 4. Map department to classification if needed
         dept_to_classification = {
             'HR': 'Human Resources',
             'Legal': 'Legal',
@@ -102,11 +126,18 @@ def process_document_indexing(doc_id, filename, filepath, department='General'):
         if mapped_classification == 'General' and classification != 'General':
             mapped_classification = classification
         
-        # 3. Ingest document text chunks into department-scoped vector store
-        chunk_count = index_document(doc_id, filename, filepath, department=department)
-        
-        # 4. Save completed indices and AI metrics
+        # 5. Save completed indices and AI metrics (unless a newer version
+        #    superseded this document while it was indexing — then leave it
+        #    retired instead of resurrecting it as indexed).
         doc = Document.objects.get(id=doc_id)
+        if doc.status == "superseded":
+            print(f"Document '{filename}' was superseded by a newer version during indexing; leaving it retired.")
+            try:
+                from app.vector_store import delete_document_from_index
+                delete_document_from_index(doc_id, department=department)
+            except Exception:
+                pass
+            return
         doc.status = "indexed"
         doc.chunk_count = chunk_count
         doc.classification = mapped_classification

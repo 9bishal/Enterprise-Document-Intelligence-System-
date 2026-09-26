@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { FileIcon, UploadIcon, TrashIcon, FolderIcon, AlertTriangleIcon } from '../components/Icons';
 import { safeLocalStorage } from '../utils/constants';
+import { useDepartments } from '../utils/useDepartments';
 const storage = safeLocalStorage();
 
 export default function DocumentsPage({
@@ -11,12 +12,19 @@ export default function DocumentsPage({
 }) {
   const [documents, setDocuments] = useState([]);
   const [uploading, setUploading] = useState(false);
+  const [previewDoc, setPreviewDoc] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(null);
+  const [previewText, setPreviewText] = useState('');
+  const [previewKind, setPreviewKind] = useState(null); // 'pdf' | 'text' | 'other'
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState('');
   const [adminActiveDepartment, setAdminActiveDepartment] = useState('All Departments');
   const [filter, setFilter] = useState('all'); // 'all', 'indexed', 'ingesting', 'failed'
   const [sortBy, setSortBy] = useState('recent'); // 'recent', 'name', 'size'
   const fileInputRef = useRef(null);
 
   const token = storage.getItem('intradoc_token');
+  const departments = useDepartments(true);
 
   // --- Fetch documents initially and when active department changes ---
   useEffect(() => {
@@ -95,12 +103,96 @@ export default function DocumentsPage({
 
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files.length > 0) {
-      handleUploadDocument(e.target.files[0]);
+      const files = Array.from(e.target.files).slice(0, 1000);
+      if (files.length > 1) {
+        handleUploadDocuments(files);
+      } else {
+        handleUploadDocument(files[0]);
+      }
+      e.target.value = '';
+    }
+  };
+
+  const handleUploadDocuments = async (files) => {
+    if (userRole === 'Viewer') {
+      alert('Access Denied: Viewer accounts are restricted to read-only access and cannot upload documents.');
+      return;
+    }
+
+    setUploading(true);
+    const formData = new FormData();
+    files.forEach((f) => formData.append('files', f));
+    if (userRole === 'Admin') {
+      formData.append('department', adminActiveDepartment);
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/documents/upload/batch`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        alert(`${data.dispatched || files.length} documents uploaded, indexing in background (2 at a time)...`);
+        fetchDocuments();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(`Batch upload failed: ${err.detail || 'unknown error'}`);
+      }
+    } catch (err) {
+      console.error('Batch upload error:', err);
+      alert('Upload error: ' + err.message);
+    } finally {
+      setUploading(false);
     }
   };
 
   const triggerFileInput = () => {
     fileInputRef.current.click();
+  };
+
+  const closePreview = () => {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewDoc(null);
+    setPreviewUrl(null);
+    setPreviewText('');
+    setPreviewKind(null);
+    setPreviewError('');
+  };
+
+  const openPreview = async (doc) => {
+    closePreview();
+    setPreviewDoc(doc);
+    setPreviewLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/documents/${doc.id}/file`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        setPreviewError(res.status === 404 ? 'File not available.' : 'Preview failed.');
+        return;
+      }
+      const blob = await res.blob();
+      const ext = (doc.filename.split('.').pop() || '').toLowerCase();
+      if (ext === 'pdf') {
+        setPreviewUrl(URL.createObjectURL(new Blob([blob], { type: 'application/pdf' })));
+        setPreviewKind('pdf');
+      } else if (ext === 'txt' || ext === 'md') {
+        setPreviewText(await blob.text());
+        setPreviewKind('text');
+      } else {
+        setPreviewUrl(URL.createObjectURL(blob));
+        setPreviewKind('other');
+      }
+    } catch (err) {
+      setPreviewError('Preview failed: ' + err.message);
+    } finally {
+      setPreviewLoading(false);
+    }
   };
 
   const handleDeleteDocument = async (docId) => {
@@ -191,6 +283,7 @@ export default function DocumentsPage({
             onChange={handleFileChange}
             style={{ display: 'none' }}
             accept=".pdf,.docx,.txt,.md"
+            multiple
           />
           <button
             className="upload-btn"
@@ -210,11 +303,9 @@ export default function DocumentsPage({
                 onChange={(e) => setAdminActiveDepartment(e.target.value)}
               >
                 <option value="All Departments">All Departments</option>
-                <option value="HR">HR</option>
-                <option value="Legal">Legal</option>
-                <option value="Finance">Finance</option>
-                <option value="Technical">Technical</option>
-                <option value="General">General</option>
+                {departments.filter(d => d !== 'All Departments').map(d => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
               </select>
             </div>
           )}
@@ -262,7 +353,7 @@ export default function DocumentsPage({
         ) : (
           <div className="documents-grid">
             {filteredDocs.map((doc) => (
-              <div className="document-item" key={doc.id}>
+              <div className="document-item" key={doc.id} onClick={() => openPreview(doc)} style={{ cursor: 'pointer' }} title="Click to preview">
                 <div className="doc-header">
                   <div className="doc-icon-section">
                     <FileIcon className="doc-icon" />
@@ -270,7 +361,7 @@ export default function DocumentsPage({
                   {userRole !== 'Viewer' && (
                     <button
                       className="delete-btn"
-                      onClick={() => handleDeleteDocument(doc.id)}
+                      onClick={(e) => { e.stopPropagation(); handleDeleteDocument(doc.id); }}
                       title="Delete document"
                     >
                       <TrashIcon style={{ width: 16, height: 16 }} />
@@ -324,6 +415,48 @@ export default function DocumentsPage({
         )}
       </div>
 
+      {/* Preview Modal */}
+      {previewDoc && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+          onClick={closePreview}
+        >
+          <div
+            style={{ background: '#fff', borderRadius: 12, width: 'min(900px, 94vw)', height: 'min(700px, 88vh)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid #eee' }}>
+              <strong style={{ fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{previewDoc.filename}</strong>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {previewUrl && (
+                  <a href={previewUrl} download={previewDoc.filename} style={{ fontSize: 12, padding: '6px 12px', border: '1px solid #ddd', borderRadius: 6, textDecoration: 'none', color: '#111' }}>
+                    Download
+                  </a>
+                )}
+                <button onClick={closePreview} style={{ fontSize: 12, padding: '6px 12px', border: '1px solid #ddd', borderRadius: 6, background: '#111', color: '#fff', cursor: 'pointer' }}>
+                  Close
+                </button>
+              </div>
+            </div>
+            <div style={{ flex: 1, overflow: 'auto', background: '#fafafa' }}>
+              {previewLoading && <p style={{ padding: 24, fontSize: 13, color: '#666' }}>Loading preview...</p>}
+              {!previewLoading && previewError && <p style={{ padding: 24, fontSize: 13, color: '#dc2626' }}>{previewError}</p>}
+              {!previewLoading && !previewError && previewKind === 'pdf' && previewUrl && (
+                <iframe src={previewUrl} title={previewDoc.filename} style={{ width: '100%', height: '100%', border: 'none', minHeight: 500 }} />
+              )}
+              {!previewLoading && !previewError && previewKind === 'text' && (
+                <pre style={{ padding: 20, fontSize: 13, whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: 0 }}>{previewText}</pre>
+              )}
+              {!previewLoading && !previewError && previewKind === 'other' && (
+                <p style={{ padding: 24, fontSize: 13, color: '#666' }}>
+                  In-browser preview isn't available for this format. Use Download to view it.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <style jsx>{`
         .documents-page {
           display: flex;
@@ -344,13 +477,13 @@ export default function DocumentsPage({
           margin: 0;
           font-size: 28px;
           font-weight: 700;
-          color: #1a1c20;
+          color: #111111;
         }
 
         .subtitle {
           margin: 8px 0 0 0;
           font-size: 14px;
-          color: #8b92a0;
+          color: #9ca3af;
         }
 
         .stats-grid {
@@ -366,35 +499,35 @@ export default function DocumentsPage({
           justify-content: center;
           padding: 20px;
           background: white;
-          border: 1px solid rgba(36, 50, 82, 0.08);
+          border: 1px solid rgba(0, 0, 0, 0.08);
           border-radius: 12px;
           gap: 8px;
           transition: all 0.2s;
         }
 
         .stat-card:hover {
-          border-color: rgba(36, 50, 82, 0.15);
+          border-color: rgba(0, 0, 0, 0.15);
           box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
         }
 
         .stat-card.indexed {
-          border-color: rgba(100, 150, 100, 0.3);
-          background: rgba(100, 150, 100, 0.05);
+          border-color: rgba(21, 128, 61, 0.3);
+          background: rgba(21, 128, 61, 0.05);
         }
 
         .stat-card.ingesting {
-          border-color: rgba(150, 120, 50, 0.3);
-          background: rgba(150, 120, 50, 0.05);
+          border-color: rgba(180, 83, 9, 0.3);
+          background: rgba(180, 83, 9, 0.05);
         }
 
         .stat-card.failed {
-          border-color: rgba(200, 100, 100, 0.3);
-          background: rgba(200, 100, 100, 0.05);
+          border-color: rgba(220, 38, 38, 0.3);
+          background: rgba(220, 38, 38, 0.05);
         }
 
         .stat-label {
           font-size: 12px;
-          color: #8b92a0;
+          color: #9ca3af;
           font-weight: 600;
           text-transform: uppercase;
         }
@@ -402,12 +535,12 @@ export default function DocumentsPage({
         .stat-value {
           font-size: 28px;
           font-weight: 700;
-          color: #1a1c20;
+          color: #111111;
         }
 
         .upload-section {
           background: white;
-          border: 2px dashed rgba(3, 7, 18, 0.2);
+          border: 2px dashed rgba(0, 0, 0, 0.2);
           border-radius: 12px;
           padding: 32px;
           display: flex;
@@ -418,8 +551,8 @@ export default function DocumentsPage({
         }
 
         .upload-section:hover {
-          border-color: rgba(3, 7, 18, 0.4);
-          background: rgba(3, 7, 18, 0.02);
+          border-color: rgba(0, 0, 0, 0.4);
+          background: rgba(0, 0, 0, 0.02);
         }
 
         .upload-content {
@@ -435,19 +568,21 @@ export default function DocumentsPage({
           align-items: center;
           gap: 8px;
           padding: 12px 24px;
-          background: rgba(3, 7, 18, 0.1);
-          border: 1px solid rgba(3, 7, 18, 0.2);
+          background: #111111;
+          border: 1px solid #111111;
           border-radius: 8px;
           font-size: 14px;
           font-weight: 600;
-          color: #030712;
+          color: #ffffff;
           cursor: pointer;
           transition: all 0.2s;
         }
 
         .upload-btn:hover:not(:disabled) {
-          background: rgba(3, 7, 18, 0.15);
-          border-color: rgba(3, 7, 18, 0.3);
+          background: #333333;
+          border-color: #333333;
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
         }
 
         .upload-btn:disabled {
@@ -464,22 +599,29 @@ export default function DocumentsPage({
         .department-selector label {
           font-size: 13px;
           font-weight: 600;
-          color: #1a1c20;
+          color: #111111;
         }
 
         .department-selector select {
           padding: 8px 12px;
-          border: 1px solid rgba(36, 50, 82, 0.15);
+          border: 1px solid rgba(0, 0, 0, 0.15);
           border-radius: 6px;
           font-size: 13px;
-          color: #1a1c20;
+          color: #111111;
           background: white;
           cursor: pointer;
+          transition: all 0.2s;
+        }
+
+        .department-selector select:focus {
+          outline: none;
+          border-color: #111111;
+          box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.08);
         }
 
         .upload-help {
           font-size: 12px;
-          color: #8b92a0;
+          color: #9ca3af;
           margin: 0;
         }
 
@@ -491,7 +633,7 @@ export default function DocumentsPage({
           background: white;
           padding: 16px;
           border-radius: 12px;
-          border: 1px solid rgba(36, 50, 82, 0.08);
+          border: 1px solid rgba(0, 0, 0, 0.08);
           flex-wrap: wrap;
         }
 
@@ -506,7 +648,7 @@ export default function DocumentsPage({
         .sort-group label {
           font-size: 13px;
           font-weight: 600;
-          color: #1a1c20;
+          color: #111111;
           white-space: nowrap;
         }
 
@@ -518,34 +660,42 @@ export default function DocumentsPage({
         .filter-btn {
           padding: 6px 12px;
           background: transparent;
-          border: 1px solid rgba(36, 50, 82, 0.15);
+          border: 1px solid rgba(0, 0, 0, 0.15);
           border-radius: 6px;
           font-size: 12px;
           font-weight: 600;
-          color: #8b92a0;
+          color: #525252;
           cursor: pointer;
           transition: all 0.2s;
         }
 
         .filter-btn:hover {
-          border-color: rgba(36, 50, 82, 0.3);
-          color: #1a1c20;
+          border-color: rgba(0, 0, 0, 0.3);
+          color: #111111;
+          background: rgba(0, 0, 0, 0.03);
         }
 
         .filter-btn.active {
-          background: rgba(3, 7, 18, 0.1);
-          border-color: rgba(3, 7, 18, 0.3);
-          color: #030712;
+          background: #111111;
+          border-color: #111111;
+          color: #ffffff;
         }
 
         .sort-group select {
           padding: 6px 10px;
-          border: 1px solid rgba(36, 50, 82, 0.15);
+          border: 1px solid rgba(0, 0, 0, 0.15);
           border-radius: 6px;
           font-size: 12px;
-          color: #1a1c20;
+          color: #111111;
           background: white;
           cursor: pointer;
+          transition: all 0.2s;
+        }
+
+        .sort-group select:focus {
+          outline: none;
+          border-color: #111111;
+          box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.08);
         }
 
         .documents-container {
@@ -566,13 +716,13 @@ export default function DocumentsPage({
         .empty-state p {
           font-size: 16px;
           font-weight: 600;
-          color: #1a1c20;
+          color: #111111;
           margin: 0;
         }
 
         .empty-state span {
           font-size: 13px;
-          color: #8b92a0;
+          color: #9ca3af;
         }
 
         .documents-grid {
@@ -583,7 +733,7 @@ export default function DocumentsPage({
 
         .document-item {
           background: white;
-          border: 1px solid rgba(36, 50, 82, 0.08);
+          border: 1px solid rgba(0, 0, 0, 0.08);
           border-radius: 12px;
           padding: 16px;
           transition: all 0.2s;
@@ -593,7 +743,7 @@ export default function DocumentsPage({
         }
 
         .document-item:hover {
-          border-color: rgba(36, 50, 82, 0.15);
+          border-color: rgba(0, 0, 0, 0.15);
           box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
         }
 
@@ -609,24 +759,27 @@ export default function DocumentsPage({
           justify-content: center;
           width: 48px;
           height: 48px;
-          background: rgba(3, 7, 18, 0.05);
+          background: rgba(0, 0, 0, 0.05);
           border-radius: 8px;
         }
 
         .doc-icon {
           width: 24px;
           height: 24px;
-          color: #030712;
+          color: #111111;
         }
 
         .delete-btn {
           background: none;
           border: none;
-          color: #C8644A;
+          color: #dc2626;
           cursor: pointer;
           padding: 4px 8px;
           transition: all 0.2s;
           opacity: 0.6;
+          display: flex;
+          align-items: center;
+          justify-content: center;
         }
 
         .delete-btn:hover {
@@ -643,7 +796,7 @@ export default function DocumentsPage({
           margin: 0;
           font-size: 14px;
           font-weight: 600;
-          color: #1a1c20;
+          color: #111111;
           word-break: break-word;
           white-space: normal;
           overflow: hidden;
@@ -656,7 +809,7 @@ export default function DocumentsPage({
         .doc-meta {
           margin: 0;
           font-size: 12px;
-          color: #8b92a0;
+          color: #9ca3af;
         }
 
         .doc-tags {
@@ -669,38 +822,38 @@ export default function DocumentsPage({
           display: inline-flex;
           align-items: center;
           padding: 4px 8px;
-          background: rgba(36, 50, 82, 0.05);
-          border: 1px solid rgba(36, 50, 82, 0.1);
+          background: rgba(0, 0, 0, 0.05);
+          border: 1px solid rgba(0, 0, 0, 0.1);
           border-radius: 4px;
           font-size: 11px;
           font-weight: 600;
-          color: #5b6472;
+          color: #525252;
           white-space: nowrap;
         }
 
         .tag.risk {
-          background: rgba(200, 100, 100, 0.1);
-          border-color: rgba(200, 100, 100, 0.3);
-          color: #C8644A;
+          background: rgba(220, 38, 38, 0.1);
+          border-color: rgba(220, 38, 38, 0.3);
+          color: #dc2626;
         }
 
         .tag.department {
-          background: rgba(100, 120, 150, 0.1);
-          border-color: rgba(100, 120, 150, 0.3);
-          color: #6478A0;
+          background: rgba(0, 0, 0, 0.06);
+          border-color: rgba(0, 0, 0, 0.15);
+          color: #111111;
         }
 
         .progress-bar {
           width: 100%;
           height: 4px;
-          background: rgba(36, 50, 82, 0.1);
+          background: rgba(0, 0, 0, 0.1);
           border-radius: 2px;
           overflow: hidden;
         }
 
         .progress-fill {
           height: 100%;
-          background: linear-gradient(90deg, #6478A0, #4A9D83);
+          background: #111111;
           animation: progress-animation 1.5s ease-in-out infinite;
         }
 
@@ -713,7 +866,7 @@ export default function DocumentsPage({
         .error-msg {
           margin: 0;
           font-size: 11px;
-          color: #C8644A;
+          color: #dc2626;
         }
 
         @media (max-width: 768px) {

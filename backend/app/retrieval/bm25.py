@@ -1,5 +1,6 @@
 import re
 import hashlib
+# pyrefly: ignore [missing-import]
 from rank_bm25 import BM25Okapi
 
 _WORD_PATTERN = re.compile(r"\w+")

@@ -21,7 +21,7 @@ from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 
 # Custom imports
-from django_backend.models import Document, ChatSession, ChatMessage, UserProfile, UserInvitation, PasswordResetOTP, LLMConfig
+from django_backend.models import Document, ChatSession, ChatMessage, UserProfile, UserInvitation, PasswordResetOTP, LLMConfig, DEPT_CHOICES
 from django_backend.permissions import IsViewerOrAbove, IsEditorOrAbove, IsAdminUser
 from django_backend.serializers import (
     UserSerializer, DocumentSerializer, ChatSessionSerializer, ChatMessageSerializer
@@ -69,14 +69,19 @@ def analyze_document_classification_and_risks(filepath):
         }}
         """
         
-        from app.llm_helper import call_llm_json
+        from app.llm_helper import call_llm_json, resolve_llm_config
+        llm_cfg = resolve_llm_config()
+        if not llm_cfg:
+            return "General", "Clean", ""
         res = call_llm_json(
             prompt=prompt,
             system_prompt="You are a precise corporate security compliance assistant. Return valid JSON only.",
-            provider="gemini",
+            provider=llm_cfg["provider"],
+            api_key=llm_cfg["api_key"],
+            model_name=llm_cfg["model"],
             temperature=0.0
         )
-
+        
         classification = res.get("classification", "General")
         risk_status = res.get("risk_status", "Clean")
         risk_details = res.get("risk_details", "")
@@ -239,7 +244,29 @@ def auth_forgot_password(request):
     PasswordResetOTP.objects.filter(email=email).delete()
     PasswordResetOTP.objects.create(email=email, otp=otp)
     
-    print(f"\n{'='*50}\nPASSWORD RESET OTP FOR {email}: {otp}\n{'='*50}\n")
+    # Send OTP via email (no console print)
+    try:
+        from django.core.mail import send_mail
+        from django.conf import settings
+        send_mail(
+            subject="Intradoc AI — Password Reset OTP",
+            message=(
+                f"Hello,\n\n"
+                f"You requested a password reset for your Intradoc AI account.\n\n"
+                f"Your OTP is:\n\n"
+                f"    {otp}\n\n"
+                f"This code expires in 15 minutes.\n\n"
+                f"If you did not request this, please ignore this email.\n\n"
+                f"— Intradoc AI"
+            ),
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[email],
+            fail_silently=False,
+        )
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"SMTP failed for password reset {email}: {e}")
+        return Response({"detail": "Failed to send OTP email. Please contact administrator."}, status=500)
     
     return Response({"message": "Password reset OTP sent to email."})
 
@@ -344,11 +371,11 @@ def update_admin_llm_config(request):
     if 'k' in cfg: config.k = cfg['k']
     
     keys = data.get("api_keys", {})
-    if "groq" in keys and "*" not in keys["groq"]:
+    if "groq" in keys and keys["groq"] and "*" not in keys["groq"]:
         config.set_groq_key(keys["groq"])
-    if "gemini" in keys and "*" not in keys["gemini"]:
+    if "gemini" in keys and keys["gemini"] and "*" not in keys["gemini"]:
         config.set_gemini_key(keys["gemini"])
-    if "openai" in keys and "*" not in keys["openai"]:
+    if "openai" in keys and keys["openai"] and "*" not in keys["openai"]:
         config.set_openai_key(keys["openai"])
         
     config.save()

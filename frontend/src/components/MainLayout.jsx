@@ -32,7 +32,7 @@ export default function MainLayout({ currentUser, userRole, userDepartment, onLo
       <header className="top-nav-bar">
         <div className="top-nav-left">
           <div className="logo-section">
-            <SparklesIcon style={{ width: 20, height: 20, color: '#030712' }} />
+            <SparklesIcon style={{ width: 20, height: 20, color: '#111111' }} />
             <h1 className="logo-text">Intradoc AI</h1>
           </div>
         </div>
@@ -123,7 +123,7 @@ export default function MainLayout({ currentUser, userRole, userDepartment, onLo
               setIsMobileNavOpen(false);
             }}
           >
-            <LogOutIcon style={{ width: 16, height: 16 }} />
+            <span><LogOutIcon style={{ width: 16, height: 16 }} /></span>
             <span>Logout</span>
           </button>
         </div>
@@ -140,8 +140,8 @@ export default function MainLayout({ currentUser, userRole, userDepartment, onLo
           flex-direction: column;
           height: 100vh;
           width: 100vw;
-          background: #FAF9F5;
-          font-family: 'Plus Jakarta Sans', sans-serif;
+          background: #fafafa;
+          font-family: 'Inter', sans-serif;
           overflow: hidden;
         }
 
@@ -150,10 +150,10 @@ export default function MainLayout({ currentUser, userRole, userDepartment, onLo
           align-items: center;
           justify-content: space-between;
           padding: 12px 24px;
-          background: rgba(255, 255, 255, 0.8);
+          background: rgba(255, 255, 255, 0.85);
           backdrop-filter: blur(10px);
-          border-bottom: 1px solid rgba(20, 20, 19, 0.08);
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+          border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
           gap: 24px;
         }
 
@@ -174,13 +174,13 @@ export default function MainLayout({ currentUser, userRole, userDepartment, onLo
         }
 
         .logo-section:hover {
-          background: rgba(20, 20, 19, 0.04);
+          background: rgba(0, 0, 0, 0.04);
         }
 
         .logo-text {
           font-size: 18px;
           font-weight: 700;
-          color: #030712;
+          color: #111111;
           margin: 0;
           letter-spacing: -0.5px;
         }
@@ -204,20 +204,19 @@ export default function MainLayout({ currentUser, userRole, userDepartment, onLo
           cursor: pointer;
           font-size: 14px;
           font-weight: 600;
-          color: #8E8B82;
+          color: #6b7280;
           transition: all 0.2s ease;
           white-space: nowrap;
         }
 
         .nav-btn:hover {
-          background: rgba(20, 20, 19, 0.06);
-          color: #141413;
+          background: rgba(0, 0, 0, 0.05);
+          color: #111111;
         }
 
         .nav-btn.active {
-          background: rgba(3, 7, 18, 0.1);
-          color: #030712;
-          box-shadow: inset 0 2px 4px rgba(20, 20, 19, 0.04);
+          background: #111111;
+          color: #ffffff;
         }
 
         .nav-icon {
@@ -252,43 +251,43 @@ export default function MainLayout({ currentUser, userRole, userDepartment, onLo
         .user-name {
           font-size: 13px;
           font-weight: 600;
-          color: #141413;
+          color: #111111;
         }
 
         .user-role {
           font-size: 11px;
-          color: #8E8B82;
+          color: #6b7280;
         }
 
         .user-department {
           font-size: 10px;
-          color: #A39F94;
+          color: #9ca3af;
         }
 
         .admin-btn {
           padding: 8px 12px;
-          background: rgba(3, 7, 18, 0.08);
-          border: 1px solid rgba(3, 7, 18, 0.15);
+          background: #111111;
+          border: 1px solid #111111;
           border-radius: 8px;
           font-size: 12px;
           font-weight: 600;
-          color: #030712;
+          color: #ffffff;
           cursor: pointer;
           transition: all 0.2s ease;
           white-space: nowrap;
         }
 
         .admin-btn:hover {
-          background: rgba(3, 7, 18, 0.12);
-          border-color: rgba(3, 7, 18, 0.25);
+          background: #333333;
+          border-color: #333333;
         }
 
         .logout-btn {
           padding: 8px;
           background: transparent;
-          border: 1px solid rgba(200, 100, 100, 0.3);
+          border: 1px solid rgba(220, 38, 38, 0.3);
           border-radius: 8px;
-          color: #C8644A;
+          color: #dc2626;
           cursor: pointer;
           transition: all 0.2s ease;
           display: flex;
@@ -297,8 +296,8 @@ export default function MainLayout({ currentUser, userRole, userDepartment, onLo
         }
 
         .logout-btn:hover {
-          background: rgba(200, 100, 100, 0.1);
-          border-color: rgba(200, 100, 100, 0.5);
+          background: rgba(220, 38, 38, 0.08);
+          border-color: rgba(220, 38, 38, 0.5);
         }
 
         .mobile-menu-toggle {
@@ -307,7 +306,7 @@ export default function MainLayout({ currentUser, userRole, userDepartment, onLo
           border: none;
           font-size: 24px;
           cursor: pointer;
-          color: #141413;
+          color: #111111;
         }
 
         @media (max-width: 1024px) {
@@ -342,8 +341,8 @@ export default function MainLayout({ currentUser, userRole, userDepartment, onLo
           flex-direction: column;
           gap: 4px;
           padding: 12px;
-          background: rgba(255, 255, 255, 0.9);
-          border-bottom: 1px solid rgba(20, 20, 19, 0.08);
+          background: rgba(255, 255, 255, 0.95);
+          border-bottom: 1px solid rgba(0, 0, 0, 0.08);
         }
 
         @media (max-width: 1024px) {
@@ -363,24 +362,24 @@ export default function MainLayout({ currentUser, userRole, userDepartment, onLo
           cursor: pointer;
           font-size: 14px;
           font-weight: 600;
-          color: #8E8B82;
+          color: #6b7280;
           transition: all 0.2s ease;
         }
 
         .mobile-nav-btn:hover,
         .mobile-nav-btn.active {
-          background: rgba(20, 20, 19, 0.06);
-          color: #141413;
+          background: rgba(0, 0, 0, 0.05);
+          color: #111111;
         }
 
         .mobile-nav-btn.logout {
-          color: #C8644A;
-          border-top: 1px solid rgba(20, 20, 19, 0.08);
+          color: #dc2626;
+          border-top: 1px solid rgba(0, 0, 0, 0.08);
           margin-top: 8px;
         }
 
         .mobile-nav-btn.logout:hover {
-          background: rgba(200, 100, 100, 0.1);
+          background: rgba(220, 38, 38, 0.08);
         }
 
         .main-content {

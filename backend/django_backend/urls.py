@@ -17,7 +17,7 @@ Including another URLconf
 
 from django.contrib import admin
 from django.urls import path
-from django.http import HttpResponse
+from django.http import HttpResponse, HttpResponseRedirect
 from django.views.decorators.csrf import csrf_exempt
 
 # Import views
@@ -98,7 +98,7 @@ def home_view(request):
         <div class="container">
             <div class="logo">✦</div>
             <h1>Intradoc AI Backend Service</h1>
-            <p>The Django REST API backend is actively running on port 8001. Please open the main user interface served by the frontend dev server.</p>
+            <p>The Django REST API backend is actively running on port 8000. Please open the main user interface served by the frontend dev server.</p>
             <a href="http://localhost:5173" class="btn">Go to Workspace Client</a>
         </div>
     </body>
@@ -111,6 +111,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 urlpatterns = [
     path("", home_view),
     path("admin/", admin.site.urls),
+    path("favicon.ico", lambda request: HttpResponseRedirect("/static/favicon.ico")),
     
     # Auth Endpoints
     path("api/auth/signup", views.auth_signup),
@@ -126,6 +127,7 @@ urlpatterns = [
     path("api/documents/upload", views.upload_document),
     path("api/documents/upload/batch", views.upload_documents_batch),
     path("api/documents/<str:doc_id>", views.delete_document),
+    path("api/documents/<str:doc_id>/file", views.preview_document),
     
     # Session Endpoints
     path("api/chat/sessions", views.chat_sessions_api),
@@ -134,6 +136,7 @@ urlpatterns = [
     
     # Core RAG Endpoint
     path("api/chat/query", views.query_rag),
+    path("api/chat/query/stream", views.query_rag_stream),
     
     # Admin Monitoring Endpoint
     path("api/admin/metrics", views.admin_metrics),
@@ -149,6 +152,7 @@ urlpatterns = [
     path("api/health/live", health_views.health_live),
     path("api/health/ready", health_views.health_ready),
     path("api/cache/stats", health_views.cache_stats),
+    path("api/departments", views.get_departments),
 
     # Global LLM Settings Endpoints
     path("api/llm-config", views.get_public_llm_config),

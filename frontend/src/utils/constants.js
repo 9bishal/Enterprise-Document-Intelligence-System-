@@ -1,31 +1,27 @@
-export const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8001/api';
-
-export const MODEL_TIERS = { ECONOMY: 'economy', STANDARD: 'standard', ADVANCED: 'advanced' };
-
-export const TIER_LABELS = {
-  [MODEL_TIERS.ECONOMY]: { label: 'Economy', color: '#648F64', bg: 'rgba(100, 143, 100, 0.12)' },
-  [MODEL_TIERS.STANDARD]: { label: 'Standard', color: '#6478A0', bg: 'rgba(100, 120, 160, 0.12)' },
-  [MODEL_TIERS.ADVANCED]: { label: 'Advanced', color: '#9A7832', bg: 'rgba(154, 120, 50, 0.12)' },
-};
+export const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000/api';
 
 export const PROVIDER_MODELS = {
   groq: [
-    { id: "llama-3.3-70b-versatile", name: "Llama 3.3 70B", tier: MODEL_TIERS.STANDARD },
-    { id: "mixtral-8x7b-32768", name: "Mixtral 8x7B", tier: MODEL_TIERS.STANDARD },
-    { id: "llama-3.1-8b-instant", name: "Llama 3.1 8B", tier: MODEL_TIERS.ECONOMY }
+    { id: "allam-2-7b", name: "Allam 2 7B (Free, 7K req/day, 500K tokens/day)" },
+    { id: "qwen/qwen3.6-27b", name: "Qwen 3.6 27B (200K tokens/day)" },
+    { id: "openai/gpt-oss-20b", name: "GPT-OSS 20B (200K tokens/day)" },
+    { id: "openai/gpt-oss-120b", name: "GPT-OSS 120B (200K tokens/day)" },
+    { id: "groq/compound", name: "Groq Compound (routes to other models)" },
+    { id: "meta-llama/llama-prompt-guard-2-22m", name: "Llama Prompt Guard 22M" },
+    { id: "meta-llama/llama-prompt-guard-2-86m", name: "Llama Prompt Guard 86M" }
   ],
   gemini: [
-    { id: "gemini-1.5-flash", name: "Gemini 1.5 Flash", tier: MODEL_TIERS.ECONOMY },
-    { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro", tier: MODEL_TIERS.ADVANCED }
+    { id: "gemini-1.5-flash", name: "Gemini 1.5 Flash (Default)" },
+    { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro (Analytical)" }
   ],
   openai: [
-    { id: "gpt-4o-mini", name: "GPT-4o Mini", tier: MODEL_TIERS.ECONOMY },
-    { id: "gpt-4o", name: "GPT-4o", tier: MODEL_TIERS.ADVANCED }
+    { id: "gpt-4o-mini", name: "GPT-4o Mini (Cost-Effective)" },
+    { id: "gpt-4o", name: "GPT-4o (High-Intelligence)" }
   ],
   ollama: [
-    { id: "llama3", name: "Llama 3", tier: MODEL_TIERS.ECONOMY },
-    { id: "mistral", name: "Mistral", tier: MODEL_TIERS.ECONOMY },
-    { id: "gemma2", name: "Gemma 2", tier: MODEL_TIERS.ECONOMY }
+    { id: "llama3", name: "Llama 3 (Local)" },
+    { id: "mistral", name: "Mistral (Local)" },
+    { id: "gemma2", name: "Gemma 2 (Local)" }
   ]
 };
 
@@ -33,9 +29,14 @@ export function safeLocalStorage() {
   const store = {};
   return {
     getItem(key) {
-      if (typeof store[key] !== 'undefined') return store[key];
-      try { const v = localStorage.getItem(key); store[key] = v; return v; }
-      catch { return null; }
+      try {
+        if (typeof localStorage !== 'undefined') {
+          const v = localStorage.getItem(key);
+          store[key] = v;
+          return v;
+        }
+      } catch { /* localStorage unavailable (e.g. SSR) -> fall through to cache */ }
+      return typeof store[key] !== 'undefined' ? store[key] : null;
     },
     setItem(key, value) {
       store[key] = value;

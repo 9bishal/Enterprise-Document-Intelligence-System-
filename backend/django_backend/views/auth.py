@@ -18,6 +18,11 @@ from django_backend.models import UserProfile, UserInvitation, PasswordResetOTP
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def auth_signup(request):
+    """
+    User registration endpoint.
+    First user to sign up becomes Admin automatically (bootstrap).
+    Subsequent users require a valid email+OTP invitation from admin.
+    """
     username = request.data.get("username")
     password = request.data.get("password")
     email = request.data.get("email", "")
@@ -104,9 +109,18 @@ def auth_login(request):
     else:
         return Response({"detail": "Invalid username or password."}, status=status.HTTP_400_BAD_REQUEST)
 
+from rest_framework_simplejwt.exceptions import TokenError
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def auth_logout(request):
+    refresh_token = request.data.get("refresh")
+    if refresh_token:
+        try:
+            token = RefreshToken(refresh_token)
+            token.blacklist()
+        except TokenError:
+            pass
     return Response({"detail": "Logout successful."})
 
 @api_view(['GET'])
@@ -137,7 +151,29 @@ def auth_forgot_password(request):
     PasswordResetOTP.objects.filter(email=email).delete()
     PasswordResetOTP.objects.create(email=email, otp=otp)
     
-    print(f"\n{'='*50}\nPASSWORD RESET OTP FOR {email}: {otp}\n{'='*50}\n")
+    # Send OTP via email (no console print)
+    try:
+        from django.core.mail import send_mail
+        from django.conf import settings
+        send_mail(
+            subject="Intradoc AI — Password Reset OTP",
+            message=(
+                f"Hello,\n\n"
+                f"You requested a password reset for your Intradoc AI account.\n\n"
+                f"Your OTP is:\n\n"
+                f"    {otp}\n\n"
+                f"This code expires in 15 minutes.\n\n"
+                f"If you did not request this, please ignore this email.\n\n"
+                f"— Intradoc AI"
+            ),
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[email],
+            fail_silently=False,
+        )
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"SMTP failed for password reset {email}: {e}")
+        return Response({"detail": "Failed to send OTP email. Please contact administrator."}, status=500)
     
     return Response({"message": "Password reset OTP sent to email."})
 

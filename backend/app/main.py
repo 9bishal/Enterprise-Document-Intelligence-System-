@@ -2,8 +2,11 @@ import os
 import uuid
 import shutil
 from typing import Dict, Any, Optional
+# pyrefly: ignore [missing-import]
 from fastapi import FastAPI, UploadFile, File, BackgroundTasks, HTTPException, Body
+# pyrefly: ignore [missing-import]
 from fastapi.middleware.cors import CORSMiddleware
+# pyrefly: ignore [missing-import]
 from pydantic import BaseModel, Field
 
 # Local imports
@@ -24,7 +27,9 @@ from app.rag_graph import run_rag_pipeline
 
 # Prometheus metrics endpoint
 try:
+    # pyrefly: ignore [missing-import]
     from prometheus_client import make_wsgi_app
+    # pyrefly: ignore [missing-import]
     from werkzeug.middleware.dispatcher import DispatcherMiddleware
     _prometheus_available = True
 except Exception:
@@ -57,6 +62,8 @@ os.makedirs(UPLOADS_DIR, exist_ok=True)
 
 # Mount Prometheus metrics endpoint
 if _prometheus_available:
+
+    # pyrefly: ignore [missing-import]
     from werkzeug.middleware.dispatcher import DispatcherMiddleware
     app.mount("/metrics", make_wsgi_app())
 

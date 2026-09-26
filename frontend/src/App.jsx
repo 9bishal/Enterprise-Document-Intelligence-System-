@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { PROVIDER_MODELS } from './utils/constants';
 import LoginScreen from './components/LoginScreen';
 import LandingPage from './components/LandingPage';
 import AdminDashboard from './components/AdminDashboard';
@@ -31,11 +32,13 @@ export default function App() {
   const [modelConfig, setModelConfig] = useState(() => {
     try {
       const saved = storage.getItem('intradoc_model_config');
+      const defaultModel = PROVIDER_MODELS.groq?.[0]?.id || 'groq/compound-mini';
       return saved ? JSON.parse(saved) : {
-        provider: 'groq', model: 'llama-3.3-70b-versatile', temperature: 0.3, k: 4
+        provider: 'groq', model: defaultModel, temperature: 0.3, k: 4 //top-k=4(hardcoded)
       };
     } catch {
-      return { provider: 'groq', model: 'llama-3.3-70b-versatile', temperature: 0.3, k: 4 };
+      const defaultModel = PROVIDER_MODELS.groq?.[0]?.id || 'groq/compound-mini';
+      return { provider: 'groq', model: defaultModel, temperature: 0.3, k: 4 };
     }
   });
 
@@ -93,7 +96,9 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         setIsGlobalConfigEnforced(data.enforce_globally);
-        if (data.enforce_globally) setModelConfig(data.config);
+        // Always apply the server's saved config as the baseline.
+        // enforce_globally only controls whether the Settings UI is locked.
+        if (data.config) setModelConfig(data.config);
       }
     } catch (err) {
       console.error(err);
@@ -107,14 +112,20 @@ export default function App() {
   const handleLogout = async () => {
     try {
       const token = storage.getItem('intradoc_token');
+      const refresh = storage.getItem('intradoc_refresh');
       await fetch(`${API_BASE}/auth/logout`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ refresh: refresh || '' })
       });
     } catch (err) {
       console.error('Logout error:', err);
     } finally {
       storage.removeItem('intradoc_token');
+      storage.removeItem('intradoc_refresh');
       storage.removeItem('intradoc_role');
       storage.removeItem('intradoc_department');
       setIsAuthenticated(false);
@@ -130,7 +141,7 @@ export default function App() {
       <div style={{
         display: 'flex', height: '100vh', width: '100vw',
         alignItems: 'center', justifyContent: 'center',
-        backgroundColor: '#f6f5f1', fontFamily: "'Inter', system-ui, sans-serif", color: '#1a1c20'
+        backgroundColor: '#fafafa', fontFamily: "'Inter', system-ui, sans-serif", color: '#111111'
       }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
           <div className="spinner" style={{ width: 28, height: 28 }}></div>
@@ -159,6 +170,8 @@ export default function App() {
               />
             } />
             <Route path="/" element={<LandingPage />} />
+            <Route path="/admin" element={<Navigate to="/login" replace />} />
+            <Route path="/admin/*" element={<Navigate to="/login" replace />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </>
         ) : (
@@ -206,6 +219,20 @@ export default function App() {
                 }
               />
               <Route
+                path="/query/:sessionId"
+                element={
+                  <QueryPage
+                    API_BASE={API_BASE}
+                    apiKeys={apiKeys}
+                    modelConfig={modelConfig}
+                    isGlobalConfigEnforced={isGlobalConfigEnforced}
+                    currentUser={currentUser}
+                    userRole={userRole}
+                    userDepartment={userDepartment}
+                  />
+                }
+              />
+              <Route
                 path="/documents"
                 element={
                   <DocumentsPage
@@ -220,6 +247,12 @@ export default function App() {
                 path="/settings"
                 element={
                   <SettingsPage
+                    API_BASE={API_BASE}
+                    apiKeys={apiKeys}
+                    handleApiKeyChange={handleApiKeyChange}
+                    modelConfig={modelConfig}
+                    setModelConfig={setModelConfig}
+                    isGlobalConfigEnforced={isGlobalConfigEnforced}
                     userRole={userRole}
                   />
                 }

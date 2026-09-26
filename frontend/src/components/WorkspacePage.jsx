@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import ChatWindow from './ChatWindow';
 import Visualizer from './Visualizer';
 import Sidebar from './Sidebar';
-import { ChevronLeftIcon, ChevronRightIcon } from './Icons';
 import { safeLocalStorage } from '../utils/constants';
 const storage = safeLocalStorage();
 
@@ -340,7 +339,7 @@ export default function WorkspacePage({
         { 
           id: Math.random().toString(), 
           role: 'assistant', 
-          content: 'Network connection error. Ensure backend Python server is running on port 8001.' 
+          content: 'Network connection error. Ensure backend Python server is running on port 8000.' 
         }
       ]);
     }
@@ -410,7 +409,7 @@ export default function WorkspacePage({
           onClick={() => setShowVisualizer(!showVisualizer)}
           title={showVisualizer ? "Collapse Analysis Panel" : "Expand Analysis Panel"}
         >
-          {showVisualizer ? <ChevronRightIcon style={{ width: 16, height: 16 }} /> : <ChevronLeftIcon style={{ width: 16, height: 16 }} />}
+          {showVisualizer ? '→' : '←'}
         </button>
       </div>
     </div>

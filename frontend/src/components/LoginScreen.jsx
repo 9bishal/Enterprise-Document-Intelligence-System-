@@ -105,6 +105,7 @@ export default function LoginScreen({ onAuthSuccess }) {
 
       if (response.ok) {
         storage.setItem('intradoc_token', data.access);
+        storage.setItem('intradoc_refresh', data.refresh || '');
         storage.setItem('intradoc_role', data.role);
         storage.setItem('intradoc_department', data.department || 'General');
         onAuthSuccess(data.username, data.role, data.department || 'General');
@@ -122,7 +123,7 @@ export default function LoginScreen({ onAuthSuccess }) {
     <div className="login-container">
       <div className="login-card glass-panel">
         <div className="login-header">
-            <div className="logo-icon login-logo-icon"><SparklesIcon style={{ width: 24, height: 24, color: '#030712' }} /></div>
+          <div className="logo-icon login-logo-icon"><SparklesIcon style={{ width: 20, height: 20 }} /></div>
           <h2 className="login-title">Intradoc AI</h2>
           <p className="login-subtitle">
             {isForgotPassword 

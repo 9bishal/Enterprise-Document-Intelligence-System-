@@ -355,6 +355,10 @@ def query_vector_store(query_text, n_results=4, doc_ids=None, department=None, a
         if r and r["ids"] and len(r["ids"][0]) > 0:
             for i in range(len(r["ids"][0])):
                 dist = r["distances"][0][i]
+                # Chroma reports squared-Euclidean distance (d = 2*(1-cos) for
+                # normalised embeddings), so true cosine similarity is
+                # cos = 1 - d/2. Clamped to [0, 100] for display.
+                cos_sim = max(0.0, 1.0 - dist / 2.0)
                 out.append({
                     "id": r["ids"][0][i],
                     "text": r["documents"][0][i],
@@ -363,7 +367,7 @@ def query_vector_store(query_text, n_results=4, doc_ids=None, department=None, a
                     "page": r["metadatas"][0][i]["page"],
                     "chunk_index": r["metadatas"][0][i]["chunk_index"],
                     "department": r["metadatas"][0][i].get("department", department or "General"),
-                    "similarity": round((1 / (1 + dist)) * 100, 1),  # Convert distance to similarity %
+                    "similarity": round(cos_sim * 100, 1),  # True cosine similarity %
                 })
         return out
 
