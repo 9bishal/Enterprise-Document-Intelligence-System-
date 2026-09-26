@@ -34,7 +34,7 @@ export default function App() {
       const saved = storage.getItem('intradoc_model_config');
       const defaultModel = PROVIDER_MODELS.groq?.[0]?.id || 'groq/compound-mini';
       return saved ? JSON.parse(saved) : {
-        provider: 'groq', model: defaultModel, temperature: 0.3, k: 4
+        provider: 'groq', model: defaultModel, temperature: 0.3, k: 4 //top-k=4(hardcoded)
       };
     } catch {
       const defaultModel = PROVIDER_MODELS.groq?.[0]?.id || 'groq/compound-mini';
@@ -206,6 +206,20 @@ export default function App() {
             >
               <Route
                 path="/query"
+                element={
+                  <QueryPage
+                    API_BASE={API_BASE}
+                    apiKeys={apiKeys}
+                    modelConfig={modelConfig}
+                    isGlobalConfigEnforced={isGlobalConfigEnforced}
+                    currentUser={currentUser}
+                    userRole={userRole}
+                    userDepartment={userDepartment}
+                  />
+                }
+              />
+              <Route
+                path="/query/:sessionId"
                 element={
                   <QueryPage
                     API_BASE={API_BASE}

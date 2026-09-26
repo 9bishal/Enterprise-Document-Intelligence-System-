@@ -125,6 +125,52 @@ export const api = {
       body: JSON.stringify(payload),
     });
   },
+  // Streaming twin: reads SSE (event: token/citations/done) and calls back
+  // as points arrive. Throws on non-SSE responses so callers fall back.
+  queryRagStream: async (payload, { onToken, onCitations } = {}) => {
+    const res = await fetch(`${API_BASE}/chat/query/stream`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...getHeaders() },
+      body: JSON.stringify(payload),
+    });
+    const ctype = res.headers.get("content-type") || "";
+    if (!res.ok || !res.body || !ctype.includes("text/event-stream")) {
+      throw new Error("stream-unavailable");
+    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    let curEvent = "";
+    const donePayload = { sources: [], steps: [], model_used: "", latency_ms: 0, success: true, id: null };
+    const dispatch = (raw) => {
+      const lines = raw.split("\n");
+      let data = "";
+      for (const ln of lines) {
+        if (ln.startsWith("event:")) curEvent = ln.slice(6).trim();
+        else if (ln.startsWith("data:")) data += ln.slice(5).trim();
+      }
+      if (!data) return;
+      let parsed = {};
+      try { parsed = JSON.parse(data); } catch { return; }
+      if (curEvent === "token" && parsed.delta && onToken) onToken(parsed.delta);
+      else if (curEvent === "citations") {
+        donePayload.sources = parsed.citations || [];
+        if (onCitations) onCitations(donePayload.sources);
+      } else if (curEvent === "done") Object.assign(donePayload, parsed);
+    };
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let idx;
+      while ((idx = buf.indexOf("\n\n")) !== -1) {
+        dispatch(buf.slice(0, idx));
+        buf = buf.slice(idx + 2);
+      }
+    }
+    if (buf.trim()) dispatch(buf);
+    return donePayload;
+  },
 
   // Admin users & metrics
   getAdminMetrics: async () => {

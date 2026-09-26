@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { SendIcon, PlusIcon, ChatIcon, FileIcon, AlertTriangleIcon, ZapIcon, DollarIcon, ClockIcon, CpuIcon, CacheIcon, LayersIcon } from './Icons';
+import { SendIcon, PlusIcon, ChatIcon, FileIcon, AlertTriangleIcon, ZapIcon, DollarIcon, ClockIcon, CpuIcon, CacheIcon, LayersIcon, ShareIcon } from './Icons';
 
 function parseMarkdown(text, onCitationClick) {
   if (!text) return '';
@@ -42,8 +42,88 @@ function parseMarkdown(text, onCitationClick) {
   return formatted;
 }
 
-function costBadgeHTML(msg) {
-  if (msg.role !== 'assistant' || !msg.model_used) return '';
+const WEAK_GROUNDING_CUTOFF = 31;
+
+function topSimilarity(msg) {
+  const srcs = citedSources(msg);
+  if (!srcs.length) return null;
+  return Math.max(...srcs.map(r => Number(r.s.similarity) || 0));
+}
+
+// Sources the answer text actually references via [1], [2], ... markers,
+// each paired with its original reference number so displayed labels match
+// the answer. A "no information" answer cites nothing, so it shows no
+// sources — the retrieval set may have passed the similarity gate without
+// containing the answer, and displaying it would imply false grounding.
+function citedSources(msg) {
+  const srcs = (msg.sources || []).filter(s => s.filename !== 'Repository Status Audit');
+  const text = msg.content || '';
+  const cited = new Set();
+  const re = /\[(\d+)\]/g;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    const idx = parseInt(m[1], 10) - 1;
+    if (idx >= 0 && idx < srcs.length) cited.add(idx);
+  }
+  return [...cited].sort((a, b) => a - b).map(i => ({ s: srcs[i], n: i + 1 }));
+}
+
+function downloadFile(filename, text, mime) {
+  const blob = new Blob([text], { type: mime || 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 200);
+}
+
+function buildExportText(query, answer, format) {
+  const q = (query || '').trim();
+  const a = (answer || '').trim();
+  if (format === 'md') return `## Question\n${q}\n\n## Answer\n${a}\n`;
+  return `Question: ${q}\n\nAnswer:\n${a}\n`;
+}
+
+function findQuery(messages, msg) {
+  const idx = (messages || []).findIndex(m => m.id === msg.id);
+  for (let i = idx - 1; i >= 0; i--) {
+    if (messages[i].role === 'user') return messages[i].content || '';
+  }
+  return '';
+}
+
+async function shareQA(query, answer, onShared, onFallbackCopy) {
+  const text = buildExportText(query, answer, 'txt');
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: 'Intradoc AI Answer', text });
+      onShared && onShared();
+      return;
+    } catch (e) { /* user cancelled or failed -> fall back to copy */ }
+  }
+  copyText(text, onFallbackCopy, onFallbackCopy);
+}
+
+async function copyText(text, onOk, onFail) {
+  try {
+    await navigator.clipboard.writeText(text);
+    onOk && onOk();
+  } catch (e) {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      onOk && onOk();
+    } catch (e2) { onFail && onFail(); }
+  }
+}
+
+function costBadgeHTML(msg) {  if (msg.role !== 'assistant' || !msg.model_used) return '';
   const cost = parseFloat(msg.estimated_cost_usd || 0).toFixed(6);
   const model = msg.model_used || '—';
   const latency = msg.latency_ms || '—';
@@ -164,11 +244,68 @@ export default function ChatWindow({
                   dangerouslySetInnerHTML={{ __html: costBadgeHTML(msg) }}
                 />
               )}
+
+              {msg.role === 'assistant' && msg.content && !msg.streaming && (
+                <div className="msg-export-row" style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                  <button
+                    className="citation-chip"
+                    title="Copy question + answer"
+                    onClick={(e) => {
+                      const btn = e.currentTarget;
+                      copyText(buildExportText(findQuery(messages, msg), msg.content, 'txt'),
+                        () => { btn.textContent = 'Copied'; setTimeout(() => { btn.textContent = 'Copy'; }, 1500); },
+                        () => { btn.textContent = 'Copy failed'; });
+                    }}
+                  >
+                    Copy
+                  </button>
+                  <button
+                    className="citation-chip"
+                    title="Download question + answer as .txt"
+                    onClick={() => downloadFile(`intradoc-answer-${msg.id || 'export'}.txt`, buildExportText(findQuery(messages, msg), msg.content, 'txt'))}
+                  >
+                    .txt
+                  </button>
+                  <button
+                    className="citation-chip"
+                    title="Download question + answer as Markdown"
+                    onClick={() => downloadFile(`intradoc-answer-${msg.id || 'export'}.md`, buildExportText(findQuery(messages, msg), msg.content, 'md'), 'text/markdown;charset=utf-8')}
+                  >
+                    .md
+                  </button>
+                  <button
+                    className="citation-chip"
+                    title="Share question + answer"
+                    onClick={(e) => {
+                      const btn = e.currentTarget;
+                      const done = () => {
+                        const orig = btn.innerHTML;
+                        btn.textContent = 'Shared';
+                        setTimeout(() => { btn.innerHTML = orig; }, 1500);
+                      };
+                      shareQA(findQuery(messages, msg), msg.content, done, done);
+                    }}
+                  >
+                    <ShareIcon style={{ width: 12, height: 12, marginRight: 4, verticalAlign: 'middle' }} />Share
+                  </button>
+                </div>
+              )}
+
+              {msg.role === 'assistant' && (() => {
+                const top = topSimilarity(msg);
+                if (top === null || top >= WEAK_GROUNDING_CUTOFF) return null;
+                return (
+                  <div style={{ fontSize: '12px', color: '#92400e', background: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.35)', borderRadius: '6px', padding: '6px 10px', marginTop: 6 }}>
+                    <AlertTriangleIcon style={{ width: 12, height: 12, marginRight: 4, verticalAlign: 'middle' }} />
+                    Weak grounding — best match {Math.round(top)}%. Verify important claims against the source.
+                  </div>
+                );
+              })()}
               
-              {msg.role === 'assistant' && msg.sources && msg.sources.length > 0 && (
+              {msg.role === 'assistant' && msg.sources && msg.sources.length > 0 && citedSources(msg).length > 0 && (
                 <div className="msg-sources">
                   {(() => {
-                    const realSources = msg.sources.filter(src => src.filename !== 'Repository Status Audit');
+                    const realSources = citedSources(msg);
                     const auditSources = msg.sources.filter(src => src.filename === 'Repository Status Audit');
                     
                     return (
@@ -176,15 +313,15 @@ export default function ChatWindow({
                         {realSources.length > 0 && (
                           <>
                             <div className="msg-source-title">Document Sources ({realSources.length})</div>
-                            {realSources.map((src, index) => (
-                              <button 
+                            {realSources.map(({ s: src, n }) => (
+                              <button
                                 key={src.id}
-                                className="citation-chip" 
+                                className="citation-chip"
                                 onClick={() => onHighlightSource(src.id)}
                                 title={`Similarity: ${src.similarity || 0}%`}
                               >
                                 <FileIcon style={{ width: 12, height: 12, marginRight: 4, verticalAlign: 'middle' }} />
-                                [{index + 1}] {src.filename} {src.page ? `(Page ${src.page})` : ''} - {Math.round(src.similarity || 0)}%
+                                [{n}] {src.filename} {src.page ? `(Page ${src.page})` : ''} - {Math.round(src.similarity || 0)}%
                               </button>
                             ))}
                           </>

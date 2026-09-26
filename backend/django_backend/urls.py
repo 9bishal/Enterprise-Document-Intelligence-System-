@@ -127,6 +127,7 @@ urlpatterns = [
     path("api/documents/upload", views.upload_document),
     path("api/documents/upload/batch", views.upload_documents_batch),
     path("api/documents/<str:doc_id>", views.delete_document),
+    path("api/documents/<str:doc_id>/file", views.preview_document),
     
     # Session Endpoints
     path("api/chat/sessions", views.chat_sessions_api),
@@ -135,6 +136,7 @@ urlpatterns = [
     
     # Core RAG Endpoint
     path("api/chat/query", views.query_rag),
+    path("api/chat/query/stream", views.query_rag_stream),
     
     # Admin Monitoring Endpoint
     path("api/admin/metrics", views.admin_metrics),

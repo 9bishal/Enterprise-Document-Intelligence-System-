@@ -126,8 +126,18 @@ def process_document_indexing(doc_id, filename, filepath, department='General'):
         if mapped_classification == 'General' and classification != 'General':
             mapped_classification = classification
         
-        # 5. Save completed indices and AI metrics
+        # 5. Save completed indices and AI metrics (unless a newer version
+        #    superseded this document while it was indexing — then leave it
+        #    retired instead of resurrecting it as indexed).
         doc = Document.objects.get(id=doc_id)
+        if doc.status == "superseded":
+            print(f"Document '{filename}' was superseded by a newer version during indexing; leaving it retired.")
+            try:
+                from app.vector_store import delete_document_from_index
+                delete_document_from_index(doc_id, department=department)
+            except Exception:
+                pass
+            return
         doc.status = "indexed"
         doc.chunk_count = chunk_count
         doc.classification = mapped_classification

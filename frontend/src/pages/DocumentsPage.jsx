@@ -12,6 +12,12 @@ export default function DocumentsPage({
 }) {
   const [documents, setDocuments] = useState([]);
   const [uploading, setUploading] = useState(false);
+  const [previewDoc, setPreviewDoc] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(null);
+  const [previewText, setPreviewText] = useState('');
+  const [previewKind, setPreviewKind] = useState(null); // 'pdf' | 'text' | 'other'
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState('');
   const [adminActiveDepartment, setAdminActiveDepartment] = useState('All Departments');
   const [filter, setFilter] = useState('all'); // 'all', 'indexed', 'ingesting', 'failed'
   const [sortBy, setSortBy] = useState('recent'); // 'recent', 'name', 'size'
@@ -97,12 +103,96 @@ export default function DocumentsPage({
 
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files.length > 0) {
-      handleUploadDocument(e.target.files[0]);
+      const files = Array.from(e.target.files).slice(0, 1000);
+      if (files.length > 1) {
+        handleUploadDocuments(files);
+      } else {
+        handleUploadDocument(files[0]);
+      }
+      e.target.value = '';
+    }
+  };
+
+  const handleUploadDocuments = async (files) => {
+    if (userRole === 'Viewer') {
+      alert('Access Denied: Viewer accounts are restricted to read-only access and cannot upload documents.');
+      return;
+    }
+
+    setUploading(true);
+    const formData = new FormData();
+    files.forEach((f) => formData.append('files', f));
+    if (userRole === 'Admin') {
+      formData.append('department', adminActiveDepartment);
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/documents/upload/batch`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        alert(`${data.dispatched || files.length} documents uploaded, indexing in background (2 at a time)...`);
+        fetchDocuments();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(`Batch upload failed: ${err.detail || 'unknown error'}`);
+      }
+    } catch (err) {
+      console.error('Batch upload error:', err);
+      alert('Upload error: ' + err.message);
+    } finally {
+      setUploading(false);
     }
   };
 
   const triggerFileInput = () => {
     fileInputRef.current.click();
+  };
+
+  const closePreview = () => {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewDoc(null);
+    setPreviewUrl(null);
+    setPreviewText('');
+    setPreviewKind(null);
+    setPreviewError('');
+  };
+
+  const openPreview = async (doc) => {
+    closePreview();
+    setPreviewDoc(doc);
+    setPreviewLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/documents/${doc.id}/file`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        setPreviewError(res.status === 404 ? 'File not available.' : 'Preview failed.');
+        return;
+      }
+      const blob = await res.blob();
+      const ext = (doc.filename.split('.').pop() || '').toLowerCase();
+      if (ext === 'pdf') {
+        setPreviewUrl(URL.createObjectURL(new Blob([blob], { type: 'application/pdf' })));
+        setPreviewKind('pdf');
+      } else if (ext === 'txt' || ext === 'md') {
+        setPreviewText(await blob.text());
+        setPreviewKind('text');
+      } else {
+        setPreviewUrl(URL.createObjectURL(blob));
+        setPreviewKind('other');
+      }
+    } catch (err) {
+      setPreviewError('Preview failed: ' + err.message);
+    } finally {
+      setPreviewLoading(false);
+    }
   };
 
   const handleDeleteDocument = async (docId) => {
@@ -193,6 +283,7 @@ export default function DocumentsPage({
             onChange={handleFileChange}
             style={{ display: 'none' }}
             accept=".pdf,.docx,.txt,.md"
+            multiple
           />
           <button
             className="upload-btn"
@@ -262,7 +353,7 @@ export default function DocumentsPage({
         ) : (
           <div className="documents-grid">
             {filteredDocs.map((doc) => (
-              <div className="document-item" key={doc.id}>
+              <div className="document-item" key={doc.id} onClick={() => openPreview(doc)} style={{ cursor: 'pointer' }} title="Click to preview">
                 <div className="doc-header">
                   <div className="doc-icon-section">
                     <FileIcon className="doc-icon" />
@@ -270,7 +361,7 @@ export default function DocumentsPage({
                   {userRole !== 'Viewer' && (
                     <button
                       className="delete-btn"
-                      onClick={() => handleDeleteDocument(doc.id)}
+                      onClick={(e) => { e.stopPropagation(); handleDeleteDocument(doc.id); }}
                       title="Delete document"
                     >
                       <TrashIcon style={{ width: 16, height: 16 }} />
@@ -323,6 +414,48 @@ export default function DocumentsPage({
           </div>
         )}
       </div>
+
+      {/* Preview Modal */}
+      {previewDoc && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+          onClick={closePreview}
+        >
+          <div
+            style={{ background: '#fff', borderRadius: 12, width: 'min(900px, 94vw)', height: 'min(700px, 88vh)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid #eee' }}>
+              <strong style={{ fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{previewDoc.filename}</strong>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {previewUrl && (
+                  <a href={previewUrl} download={previewDoc.filename} style={{ fontSize: 12, padding: '6px 12px', border: '1px solid #ddd', borderRadius: 6, textDecoration: 'none', color: '#111' }}>
+                    Download
+                  </a>
+                )}
+                <button onClick={closePreview} style={{ fontSize: 12, padding: '6px 12px', border: '1px solid #ddd', borderRadius: 6, background: '#111', color: '#fff', cursor: 'pointer' }}>
+                  Close
+                </button>
+              </div>
+            </div>
+            <div style={{ flex: 1, overflow: 'auto', background: '#fafafa' }}>
+              {previewLoading && <p style={{ padding: 24, fontSize: 13, color: '#666' }}>Loading preview...</p>}
+              {!previewLoading && previewError && <p style={{ padding: 24, fontSize: 13, color: '#dc2626' }}>{previewError}</p>}
+              {!previewLoading && !previewError && previewKind === 'pdf' && previewUrl && (
+                <iframe src={previewUrl} title={previewDoc.filename} style={{ width: '100%', height: '100%', border: 'none', minHeight: 500 }} />
+              )}
+              {!previewLoading && !previewError && previewKind === 'text' && (
+                <pre style={{ padding: 20, fontSize: 13, whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: 0 }}>{previewText}</pre>
+              )}
+              {!previewLoading && !previewError && previewKind === 'other' && (
+                <p style={{ padding: 24, fontSize: 13, color: '#666' }}>
+                  In-browser preview isn't available for this format. Use Download to view it.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <style jsx>{`
         .documents-page {

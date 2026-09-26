@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import styles from './AdminStyles';
-import { CheckCircleIcon, MailIcon, UsersIcon } from '../Icons';
+import { CheckCircleIcon, MailIcon, UsersIcon, TrashIcon } from '../Icons';
 import { useDepartments } from '../../utils/useDepartments';
 
 export default function AdminRoster({ users, authHeaders, API_BASE, onRefreshUsers }) {
@@ -28,6 +28,28 @@ export default function AdminRoster({ users, authHeaders, API_BASE, onRefreshUse
       }
     } catch (e) {
       setInviteMsg('Error: Network error sending invitation');
+    }
+  };
+
+  const handleDeleteUser = async (user) => {
+    const ok = window.confirm(
+      `Delete user '${user.username}' (${user.email || 'no email'})?\n\nThis permanently removes their account, documents, and chat history. This cannot be undone.`
+    );
+    if (!ok) return;
+    try {
+      const res = await fetch(`${API_BASE}/admin/users/${user.id}`, {
+        method: 'DELETE',
+        headers: authHeaders,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        onRefreshUsers();
+      } else {
+        alert(data.detail || 'Delete failed');
+      }
+    } catch (e) {
+      console.error(e);
+      alert('Delete failed: network error');
     }
   };
 
@@ -95,13 +117,14 @@ export default function AdminRoster({ users, authHeaders, API_BASE, onRefreshUse
         <h3 style={styles.cardTitle}><UsersIcon style={{ width: 16, height: 16, verticalAlign: 'middle', marginRight: 6 }} /> Corporate Directory</h3>
         <table style={styles.table}>
           <thead>
-            <tr>
-              <th style={styles.th}>Username</th>
-              <th style={styles.th}>Email</th>
-              <th style={styles.th}>Joined</th>
-              <th style={styles.th}>Role</th>
-              <th style={styles.th}>Department</th>
-            </tr>
+              <tr>
+                <th style={styles.th}>Username</th>
+                <th style={styles.th}>Email</th>
+                <th style={styles.th}>Joined</th>
+                <th style={styles.th}>Role</th>
+                <th style={styles.th}>Department</th>
+                <th style={styles.th}>Action</th>
+              </tr>
           </thead>
           <tbody>
             {users.map(u => (
@@ -130,6 +153,17 @@ export default function AdminRoster({ users, authHeaders, API_BASE, onRefreshUse
                       <option key={d} value={d}>{d}</option>
                     ))}
                   </select>
+                </td>
+                <td style={styles.td}>
+                  <button
+                    className="action-btn"
+                    title={`Delete ${u.username}`}
+                    onClick={() => handleDeleteUser(u)}
+                    style={{ padding: '4px 10px', fontSize: '12px', color: '#DC2626', border: '1px solid rgba(220,38,38,0.35)', background: 'transparent', cursor: 'pointer', borderRadius: '6px' }}
+                  >
+                    <TrashIcon style={{ width: 12, height: 12, marginRight: 4, verticalAlign: 'middle' }} />
+                    Delete
+                  </button>
                 </td>
               </tr>
             ))}

@@ -12,12 +12,27 @@ from django_backend.permissions import IsAdminUser
 @api_view(['GET'])
 @permission_classes([IsAdminUser])
 def admin_metrics(request):
-    # Counts
+    # Counts (documents scoped to actually-indexed for retrieval truthfulness)
     total_users = User.objects.count()
-    total_documents = Document.objects.count()
-    total_chunks = Document.objects.aggregate(models.Sum('chunk_count'))['chunk_count__sum'] or 0
-    total_file_size = Document.objects.aggregate(models.Sum('file_size'))['file_size__sum'] or 0
+    indexed_docs = Document.objects.filter(status="indexed")
+    total_documents = indexed_docs.count()
+    total_chunks = indexed_docs.aggregate(models.Sum('chunk_count'))['chunk_count__sum'] or 0
+    total_file_size = indexed_docs.aggregate(models.Sum('file_size'))['file_size__sum'] or 0
     total_sessions = ChatSession.objects.count()
+
+    # Real request metrics from the assistant-message ledger (classic + streamed
+    # queries both persist input/output tokens, cost, latency and cache hits).
+    assistant_msgs = ChatMessage.objects.filter(role="assistant")
+    token_agg = assistant_msgs.aggregate(
+        total_in=models.Sum('input_tokens'), total_out=models.Sum('output_tokens'),
+    )
+    total_input_tokens = token_agg['total_in'] or 0
+    total_output_tokens = token_agg['total_out'] or 0
+    total_cost = assistant_msgs.aggregate(total=models.Sum('estimated_cost_usd'))['total'] or 0.0
+    total_responses = assistant_msgs.count()
+    cache_hits = assistant_msgs.filter(cache_hit=True).count()
+    avg_latency_agg = assistant_msgs.aggregate(avg=models.Avg('latency_ms'))['avg'] or 0
+    error_responses = assistant_msgs.filter(models.Q(model_used="error") | models.Q(content__icontains="an error occurred")).count()
     
     # User lists with role and department
     users_list = []
@@ -79,7 +94,18 @@ def admin_metrics(request):
         
     # Sort recent activity by timestamp descending
     recent_activity_list = sorted(recent_activity_list, key=lambda x: x['timestamp'], reverse=True)[:8]
-    
+
+    # Indexed documents list for the vector-database panel
+    indexed_documents_list = [{
+        "id": d.id,
+        "filename": d.filename,
+        "owner": d.user.username if d.user_id else "Unknown",
+        "department": d.department,
+        "status": d.status,
+        "chunk_count": d.chunk_count,
+        "file_size": d.file_size,
+    } for d in indexed_docs.order_by("-created_at")]
+
     return Response({
         "metrics": {
             "total_users": total_users,
@@ -87,10 +113,17 @@ def admin_metrics(request):
             "total_chunks": total_chunks,
             "total_file_size": total_file_size,
             "total_sessions": total_sessions,
-            "estimated_tokens": estimated_tokens
+            "estimated_tokens": total_input_tokens + total_output_tokens,
+            "total_tokens": total_input_tokens + total_output_tokens,
+            "total_cost": round(float(total_cost), 6),
+            "cache_hits": cache_hits,
+            "total_responses": total_responses,
+            "avg_latency": round(float(avg_latency_agg)),
+            "error_responses": error_responses,
         },
         "users": users_list,
         "classification_distribution": class_dist_map,
         "flagged_documents": flagged_docs_list,
+        "indexed_documents": indexed_documents_list,
         "recent_activities": recent_activity_list
     })

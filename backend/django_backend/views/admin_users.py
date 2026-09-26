@@ -110,14 +110,18 @@ def admin_users_list(request):
         })
     return Response(users_data)
 
-@api_view(['PATCH'])
+@api_view(['PATCH', 'DELETE'])
 @permission_classes([IsAdminUser])
 def admin_update_user(request, user_id):
-    """Update a user's role and/or department."""
+    """Update a user's role and/or department (PATCH), or delete the user
+    with all their documents, vectors, files and sessions (DELETE)."""
     try:
         target_user = User.objects.get(id=user_id)
     except User.DoesNotExist:
         return Response({"detail": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == 'DELETE':
+        return _delete_user(request, target_user)
 
     profile, _ = UserProfile.objects.get_or_create(user=target_user, defaults={'role': 'Viewer', 'department': 'General'})
 
@@ -150,4 +154,50 @@ def admin_update_user(request, user_id):
         "username": target_user.username,
         "role": profile.role,
         "department": profile.department
+    })
+
+
+def _delete_user(request, target_user):
+    """Delete a user and clean up everything they own: vector chunks, files,
+    documents, sessions (DB cascades profile/sessions). Guards self-delete
+    and deleting the last admin."""
+    import os as _os
+
+    if target_user.id == request.user.id:
+        return Response({"detail": "You cannot delete your own account."},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    from django.contrib.auth.models import User as _User
+    from django_backend.models import Document as _Document, UserProfile as _UserProfile
+    admin_ids = set(_UserProfile.objects.filter(role='Admin').values_list('user_id', flat=True))
+    if target_user.id in admin_ids and len(admin_ids) <= 1:
+        return Response({"detail": "You cannot delete the last admin account."},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    username = target_user.username
+    deleted_id = target_user.id
+    removed_docs = 0
+    for doc in _Document.objects.filter(user=target_user):
+        try:
+            from app.vector_store import delete_document_from_index
+            delete_document_from_index(str(doc.id), department=doc.department)
+        except Exception as e:
+            print(f"[admin] vector cleanup failed for doc {doc.id}: {e}")
+        try:
+            if doc.path and _os.path.exists(doc.path):
+                _os.remove(doc.path)
+        except Exception as e:
+            print(f"[admin] file cleanup failed for doc {doc.id}: {e}")
+        removed_docs += 1
+
+    try:
+        from django_backend.cache.semantic_cache import SemanticResponseCache
+        SemanticResponseCache().flush_type(reason="user_deleted")
+    except Exception as e:
+        print(f"[admin] semantic cache flush failed: {e}")
+
+    target_user.delete()
+    return Response({
+        "detail": f"User '{username}' and {removed_docs} document(s) deleted successfully.",
+        "id": deleted_id,
     })

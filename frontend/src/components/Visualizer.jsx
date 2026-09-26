@@ -3,6 +3,8 @@ import { SparklesIcon, GraphIcon, DatabaseIcon, FileIcon, SearchIcon, ZapIcon, D
 
 const STEP_LABELS = {
   'semantic_cache_hit': { icon: CacheIcon, name: 'Semantic Cache', status: 'Cached response returned' },
+  'greeting': { icon: ZapIcon, name: 'Greeting Guard', status: 'Instant reply, no LLM call' },
+  'meta_query': { icon: DatabaseIcon, name: 'Document Index', status: 'Index listed, no LLM call' },
   'retrieve': { icon: DatabaseIcon, name: 'Vector Retriever (Chroma)', status: 'Indexed fetched' },
   'grade_documents': { icon: ZapIcon, name: 'Document Grader', status: 'Relevance scored' },
   'web_search': { icon: GlobeIcon, name: 'Web Search Fallback', status: 'Fetched web result' },
@@ -10,7 +12,7 @@ const STEP_LABELS = {
   'grade_generation': { icon: CheckCircleIcon, name: 'Groundedness Evaluator', status: 'Facts verified' },
   'grade_generation_critique': { icon: AlertTriangleIcon, name: 'Self-Correction Critique', status: 'Re-routing generation' },
 };
-const STEP_ORDER = ['semantic_cache_hit', 'retrieve', 'grade_documents', 'web_search', 'generate', 'grade_generation', 'grade_generation_critique'];
+const STEP_ORDER = ['semantic_cache_hit', 'greeting', 'meta_query', 'retrieve', 'grade_documents', 'web_search', 'generate', 'grade_generation', 'grade_generation_critique'];
 
 export default function Visualizer({
   steps,
@@ -22,7 +24,8 @@ export default function Visualizer({
   messageTokens,
   messageLatency,
   messageCacheHit,
-  messageEvaluation
+  messageEvaluation,
+  isRunning = true,
 }) {
   const [activeTab, setActiveTab] = useState('graph');
   const sourceRefs = useRef({});
@@ -55,7 +58,9 @@ export default function Visualizer({
     if (stepIndex === -1) return 'inactive';
     const maxCompletedStepIdx = Math.max(...safeSteps.map(s => STEP_ORDER.indexOf(s)).filter(i => i >= 0), -1);
     if (stepIndex < maxCompletedStepIdx) return 'completed';
-    if (stepIndex === maxCompletedStepIdx) return 'active';
+    // The last reached stage only shows "Running..." while the request is
+    // actually in flight; once done it flips to completed.
+    if (stepIndex === maxCompletedStepIdx) return isRunning ? 'active' : 'completed';
     return 'inactive';
   };
 

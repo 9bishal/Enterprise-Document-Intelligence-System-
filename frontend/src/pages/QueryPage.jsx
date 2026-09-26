@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import ChatWindow from '../components/ChatWindow';
 import Visualizer from '../components/Visualizer';
 import { GlobeIcon, UsersIcon, DollarIcon, WrenchIcon, FileIcon, UserIcon, EditIcon, TrashIcon, PlusIcon, ChatIcon, FolderIcon, CheckIcon, XIcon, MoreVerticalIcon } from '../components/Icons';
@@ -23,6 +24,21 @@ export default function QueryPage({
   const [sessions, setSessions] = useState([]);
   const [activeSessionId, setActiveSessionId] = useState(null);
   const [messages, setMessages] = useState([]);
+
+  // Every chat thread has its own URL (/query/:sessionId) so threads are
+  // deep-linkable and browser back/forward moves between threads.
+  const { sessionId: routeSessionId } = useParams();
+  const navigate = useNavigate();
+
+  // Keep the active session in sync with the URL.
+  useEffect(() => {
+    if (routeSessionId && routeSessionId !== activeSessionId) {
+      setActiveSessionId(routeSessionId);
+    } else if (!routeSessionId && activeSessionId) {
+      setActiveSessionId(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeSessionId]);
 
   // --- Loading / Processing State ---
   const [chatLoading, setChatLoading] = useState(false);
@@ -62,8 +78,11 @@ export default function QueryPage({
       if (res.ok) {
         const data = await res.json();
         setSessions(data);
-        if (data.length > 0 && !activeSessionId) {
-          setActiveSessionId(data[0].id);
+        if (routeSessionId) {
+          // Deep link: honour the URL session (validated below by fetchMessages).
+          setActiveSessionId(routeSessionId);
+        } else if (data.length > 0 && !activeSessionId) {
+          navigate(`/query/${data[0].id}`, { replace: true });
         }
       }
     } catch (err) {
@@ -81,7 +100,6 @@ export default function QueryPage({
       if (res.ok) {
         const data = await res.json();
         setMessages(data);
-
         // Populate visualizer with steps from latest assistant message
         const assistantMsgs = data.filter(m => m.role === 'assistant');
         if (assistantMsgs.length > 0) {
@@ -90,6 +108,9 @@ export default function QueryPage({
         } else {
           setExecutionSteps([]);
         }
+      } else {
+        // Unknown/deleted thread id in the URL — fall back to thread list.
+        navigate('/query', { replace: true });
       }
     } catch (err) {
       console.error('Failed to fetch messages:', err);
@@ -114,7 +135,7 @@ export default function QueryPage({
       if (res.ok) {
         const data = await res.json();
         setSessions(prev => [data, ...prev]);
-        setActiveSessionId(data.id);
+        navigate(`/query/${data.id}`);
       }
     } catch (err) {
       console.error('Failed to create session:', err);
@@ -140,7 +161,7 @@ export default function QueryPage({
           const data = await res.json();
           setSessions([data]);
           currentSessionId = data.id;
-          setActiveSessionId(data.id);
+          navigate(`/query/${data.id}`, { replace: true });
         } else {
           alert('Failed to start chat session.');
           return;
@@ -163,6 +184,106 @@ export default function QueryPage({
     };
     setMessages(prev => [...prev, localUserMsg]);
 
+    const payload = {
+      session_id: currentSessionId,
+      question: text,
+      api_keys: apiKeys,
+      config: modelConfig,
+      department: userRole === 'Admin' ? adminActiveDepartment : userDepartment
+    };
+
+    // 1. Try streaming first: points render as they arrive (fast perceived
+    // latency). Any stream failure falls through to the classic request.
+    let pacerTimer = null;
+    try {
+      const streamId = Math.random().toString();
+      let streamedAny = false;
+      setMessages(prev => [...prev, {
+        id: streamId, role: 'assistant', content: '',
+        created_at: new Date().toISOString(), steps: ['retrieve'],
+        sources: [], streaming: true,
+      }]);
+      setExecutionSteps(['retrieve']);
+      // Paced renderer: Groq often bursts a whole short answer in ~100ms,
+      // which would paint all at once. Buffer deltas and reveal ~1000
+      // chars/sec so streaming is actually visible. Content is real —
+      // only the pacing is cosmetic.
+      let pending = '';
+      const PACER_MS = 24;
+      const PACER_CHARS = 24;
+      pacerTimer = setInterval(() => {        if (pending) {
+          const slice = pending.slice(0, PACER_CHARS);
+          pending = pending.slice(PACER_CHARS);
+          streamedAny = true;
+          setMessages(prev => prev.map(m => m.id === streamId ? { ...m, content: (m.content || '') + slice } : m));
+        }
+      }, PACER_MS);
+      const done = await (async () => {
+        const res = await fetch(`${API_BASE}/chat/query/stream`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(payload),
+        });
+        const ctype = res.headers.get('content-type') || '';
+        if (!res.ok || !ctype.includes('text/event-stream')) throw new Error('stream-unavailable');
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = ''; let curEvent = '';
+        const out = { sources: [], steps: ['retrieve', 'generate'], model_used: '', latency_ms: 0, success: true, id: null, cache_hit: false, input_tokens: 0, output_tokens: 0, estimated_cost_usd: 0 };
+        const dispatch = (raw) => {
+          let data = '';
+          for (const ln of raw.split('\n')) {
+            if (ln.startsWith('event:')) curEvent = ln.slice(6).trim();
+            else if (ln.startsWith('data:')) data += ln.slice(5).trim();
+          }
+          if (!data) return;
+          let p = {}; try { p = JSON.parse(data); } catch { return; }
+          if (curEvent === 'token' && p.delta) {
+            pending += p.delta;
+          } else if (curEvent === 'citations') {
+            out.sources = p.citations || [];
+            setMessages(prev => prev.map(m => m.id === streamId ? { ...m, sources: out.sources, steps: ['retrieve', 'grade_documents', 'generate'] } : m));
+            setExecutionSteps(['retrieve', 'grade_documents', 'generate']);
+          } else if (curEvent === 'done') Object.assign(out, p);
+        };
+        for (;;) {
+          const { done: rd, value } = await reader.read();
+          if (rd) break;
+          buf += decoder.decode(value, { stream: true });
+          let idx;
+          while ((idx = buf.indexOf('\n\n')) !== -1) { dispatch(buf.slice(0, idx)); buf = buf.slice(idx + 2); }
+        }
+        if (buf.trim()) dispatch(buf);
+        return out;
+      })();
+      // Let the pacer finish revealing buffered tokens before finalizing,
+      // so nothing is cut off and the stream-out reads naturally.
+      const drainStart = Date.now();
+      while (pending && Date.now() - drainStart < 15000) {
+        await new Promise(r => setTimeout(r, PACER_MS));
+      }
+      clearInterval(pacerTimer);
+      setMessages(prev => prev.map(m => m.id === streamId ? {
+        ...m, streaming: false, id: done.id || streamId,
+        sources: done.sources || m.sources, steps: done.steps || m.steps,
+        model_used: done.model_used, latency_ms: done.latency_ms,
+        cache_hit: done.cache_hit || false,
+        input_tokens: done.input_tokens || 0, output_tokens: done.output_tokens || 0,
+        estimated_cost_usd: done.estimated_cost_usd || 0,
+      } : m));
+      setExecutionSteps(done.steps || ['retrieve', 'generate']);
+      if (streamedAny) { setChatLoading(false); setActiveStep(null); return; }
+      // Stream connected but yielded nothing: fall through to classic request.
+      setMessages(prev => prev.filter(m => m.id !== streamId));
+    } catch (streamErr) {
+      if (pacerTimer) clearInterval(pacerTimer);
+      // Remove any placeholder, then use the classic non-streaming request.
+      setMessages(prev => prev.filter(m => !m.streaming));
+    }
+
     try {
       const res = await fetch(`${API_BASE}/chat/query`, {
         method: 'POST',
@@ -170,13 +291,7 @@ export default function QueryPage({
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({
-          session_id: currentSessionId,
-          question: text,
-          api_keys: apiKeys,
-          config: modelConfig,
-          department: userRole === 'Admin' ? adminActiveDepartment : userDepartment
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (res.ok) {
@@ -247,7 +362,7 @@ export default function QueryPage({
         setSessions(prev => prev.filter(s => s.id !== sessionId));
         if (activeSessionId === sessionId) {
           const remaining = sessions.filter(s => s.id !== sessionId);
-          setActiveSessionId(remaining.length > 0 ? remaining[0].id : null);
+          navigate(remaining.length > 0 ? `/query/${remaining[0].id}` : '/query', { replace: true });
         }
         setOpenMenuId(null);
       }
@@ -356,7 +471,7 @@ export default function QueryPage({
                 <div
                   key={session.id}
                   className={`chat-history-item ${activeSessionId === session.id ? 'active' : ''}`}
-                  onClick={() => setActiveSessionId(session.id)}
+                  onClick={() => navigate(`/query/${session.id}`)}
                 >
                   {editingSessionId === session.id ? (
                     <div className="edit-session-form">
@@ -389,7 +504,7 @@ export default function QueryPage({
                         className="history-item-content"
                         onClick={(e) => {
                           e.stopPropagation();
-                          setActiveSessionId(session.id);
+                          navigate(`/query/${session.id}`);
                         }}
                       >
                         <span className="history-item-name" title={session.name}>
@@ -459,7 +574,7 @@ export default function QueryPage({
           <ChatWindow
             sessions={sessions}
             activeSessionId={activeSessionId}
-            onSelectSession={setActiveSessionId}
+            onSelectSession={(id) => navigate(`/query/${id}`)}
             onCreateSession={handleCreateSession}
             messages={messages}
             onSendMessage={handleSendMessage}
@@ -487,6 +602,7 @@ export default function QueryPage({
             <Visualizer
               steps={executionSteps}
               activeStep={activeStep}
+              isRunning={chatLoading}
               highlightedSourceId={highlightedSourceId}
               sources={messages.length > 0 && messages[messages.length - 1]?.role === 'assistant' ? messages[messages.length - 1]?.sources : []}
               onClearHighlight={() => setHighlightedSourceId(null)}

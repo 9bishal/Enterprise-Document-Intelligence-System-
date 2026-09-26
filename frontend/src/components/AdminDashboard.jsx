@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation, Routes, Route, Navigate } from 'react-router-dom';
 import { api } from '../utils/api';
 import { SparklesIcon, BarChartIcon, UsersIcon, NetworkIcon, SettingsIcon, ChatIcon } from './Icons';
 import { safeLocalStorage } from '../utils/constants';
@@ -21,7 +21,12 @@ export default function AdminDashboard({
   onConfigSaved, onLogout
 }) {
   const navigate = useNavigate();
-  const [activeSubTab, setActiveSubTab] = useState('analytics');
+  const location = useLocation();
+  // Sidebar tab is driven by the URL (/admin/<tab>) so every admin section
+  // is deep-linkable and back/forward works. Unknown tabs fall back to analytics.
+  const _tabSeg = location.pathname.split('/').filter(Boolean)[1];
+  const activeSubTab = NAV_ITEMS.some(i => i.key === _tabSeg) ? _tabSeg : 'analytics';
+  const goTab = (key) => navigate(`/admin/${key}`);
   const [metrics, setMetrics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState([]);
@@ -92,7 +97,7 @@ export default function AdminDashboard({
               <button
                 key={item.key}
                 className={`admin-nav-btn ${activeSubTab === item.key ? 'active' : ''}`}
-                onClick={() => setActiveSubTab(item.key)}
+                onClick={() => goTab(item.key)}
               >
                 <span className="admin-nav-icon"><item.icon style={{ width: 16, height: 16 }} /></span>
                 <span>{item.label}</span>
@@ -160,27 +165,30 @@ export default function AdminDashboard({
             </div>
           ) : (
             <>
-              {activeSubTab === 'analytics' && <AdminAnalytics metrics={metrics} />}
-              {activeSubTab === 'roster' && (
-                <AdminRoster 
-                  users={users} 
-                  authHeaders={authHeaders} 
-                  API_BASE={API_BASE} 
-                  onRefreshUsers={async () => {
-                    const res = await api.getAdminUsers();
-                    if (res.ok) setUsers(await res.json());
-                  }} 
-                />
-              )}
-              {activeSubTab === 'graph' && <AdminGraph graphData={graphData} />}
-              {activeSubTab === 'system' && (
-                <AdminSystemConfig 
-                  llmConfig={llmConfig} 
-                  setLlmConfig={setLlmConfig} 
-                  handleSaveLlmConfig={handleSaveLlmConfig} 
-                  savingLlm={savingLlm} 
-                />
-              )}
+              <Routes>
+                <Route path="analytics" element={<AdminAnalytics metrics={metrics} />} />
+                <Route path="roster" element={
+                  <AdminRoster
+                    users={users}
+                    authHeaders={authHeaders}
+                    API_BASE={API_BASE}
+                    onRefreshUsers={async () => {
+                      const res = await api.getAdminUsers();
+                      if (res.ok) setUsers(await res.json());
+                    }}
+                  />
+                } />
+                <Route path="graph" element={<AdminGraph graphData={graphData} />} />
+                <Route path="system" element={
+                  <AdminSystemConfig
+                    llmConfig={llmConfig}
+                    setLlmConfig={setLlmConfig}
+                    handleSaveLlmConfig={handleSaveLlmConfig}
+                    savingLlm={savingLlm}
+                  />
+                } />
+                <Route path="*" element={<Navigate to="analytics" replace />} />
+              </Routes>
             </>
           )}
         </div>
