@@ -2,7 +2,7 @@
 
 Get the Document Intelligent System up and running in minutes!
 
-## ⚡ 5-Minute Setup
+## 5-Minute Setup
 
 ### 1. Clone & Navigate
 
@@ -58,7 +58,7 @@ Frontend available at: `http://localhost:5173`
 
 ---
 
-## 🔑 Essential Environment Variables
+## Essential Environment Variables
 
 Create `.env` in the `backend/` directory:
 
@@ -66,23 +66,30 @@ Create `.env` in the `backend/` directory:
 # Django
 DEBUG=False
 SECRET_KEY=change-me-to-something-secret
-DATABASE_URL=sqlite:///data/app.db
 
-# LLM
-OPENAI_API_KEY=sk-your-key-here
-OPENAI_MODEL=gpt-4
+# LLM (admin LLMConfig in DB takes precedence when enforced)
+GROQ_API_KEY=gsk-your-key-here
 
-# Vector DB
-CHROMA_HOST=localhost
-CHROMA_PORT=8000
+# Redis (required for semantic cache; must load RediSearch - see below)
+INTRADOC_REDIS_URL=redis://localhost:6379/0
 
-# JWT
-JWT_SECRET=your-jwt-secret-key
+# RAG tuning (all optional, defaults shown)
+INTRADOC_FAST_PATH=1
+INTRADOC_SHORT_ANSWERS=1
+INTRADOC_MAX_TOKENS=512
+INTRADOC_MIN_SIMILARITY=20
+INTRADOC_INDEX_WORKERS=2
+```
+
+Start Redis with the search module (semantic cache stays disabled without it):
+
+```bash
+./start_redis.sh
 ```
 
 ---
 
-## 📝 First Steps After Setup
+## First Steps After Setup
 
 ### 1. Create Admin Account
 
@@ -93,27 +100,28 @@ python manage.py createsuperuser
 
 ### 2. Upload a Document
 
-1. Click "Upload" in DocumentsPage
-2. Select a PDF or document
+1. Open Documents, click Upload (single file or multi-select, up to 1000 per batch)
+2. Select PDF, DOCX, TXT, or MD files
 3. Choose a department
-4. Click "Upload"
+4. Click Upload - indexing runs 2-at-a-time in the background; re-uploading the
+   same file supersedes the old version, byte-identical content is skipped
 
 ### 3. Start a Chat
 
-1. Click "➕ New Chat" button
+1. Click "New Chat" button (each thread gets its own `/query/:id` URL)
 2. Enter a question about your documents
-3. See the RAG pipeline execute in real-time
-4. Read the response with sources cited
+3. Watch points stream in with live pipeline stages and cited sources
+4. Repeat questions return from semantic cache in milliseconds
 
 ### 4. Manage Chat Sessions
 
 Each chat in the sidebar has a **3-dot menu** (⋮) with:
-- **✏️ Rename** - Rename the chat session
-- **🗑️ Delete** - Delete the chat session
+- **Rename** - Rename the chat session
+- **Delete** - Delete the chat session
 
 ---
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### Backend Won't Start
 
@@ -155,17 +163,24 @@ python manage.py migrate
 ### LLM API Errors
 
 ```bash
-# Verify API key
-echo $OPENAI_API_KEY
+# Groq key lives in admin LLM Config (DB) or env
+# Test a Groq key
+curl https://api.groq.com/openai/v1/models \
+  -H "Authorization: Bearer $GROQ_API_KEY"
+```
 
-# Test API key
-curl https://api.openai.com/v1/models \
-  -H "Authorization: Bearer $OPENAI_API_KEY"
+### Semantic Cache Disabled
+
+```bash
+# The RAG worker logs nothing but caching silently stays off when either
+# condition fails: redisvl vectorizer mismatch, or Redis without RediSearch.
+redis-cli module list  # must show the 'search' module
+./start_redis.sh       # restarts Redis with RediSearch loaded
 ```
 
 ---
 
-## 🎯 Common Tasks
+## Common Tasks
 
 ### Run Tests
 
@@ -208,7 +223,7 @@ npm run build
 
 ---
 
-## 📚 Next Steps
+## Next Steps
 
 1. **Read the Documentation**
    - See [README.md](./README.md) for full documentation
@@ -232,7 +247,7 @@ npm run build
 
 ---
 
-## 💡 Pro Tips
+## Pro Tips
 
 ### Development Tips
 - Use `django-debug-toolbar` for query optimization
@@ -245,8 +260,8 @@ npm run build
 - Check the pipeline visualization
 
 ### Performance Tips
-- Use smaller models for testing (GPT-3.5)
-- Implement caching for frequently asked questions
+- Answers stream from a single LLM call with a 512-token cap; repeats hit semantic cache
+- Tune `INTRADOC_INDEX_WORKERS` for big batch uploads
 - Index important documents first
 
 ---
@@ -260,10 +275,8 @@ npm run build
 
 ---
 
-## 🎉 You're Ready!
+## You're Ready!
 
 The system is now running. Start uploading documents and asking questions!
 
 Questions? Check the troubleshooting section or open an issue.
-
-Happy documenting! 📄✨

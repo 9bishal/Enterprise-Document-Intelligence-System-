@@ -1,6 +1,6 @@
 # Project Structure & Architecture
 
-## 📊 High-Level Architecture
+## High-Level Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -36,11 +36,11 @@
 │  │ - Document Processing                                   │   │
 │  └──────────┬───────────────────────────────────────────────┘   │
 │  ┌──────────▼───────────────────────────────────────────────┐   │
-│  │ RAG Pipeline Layer (app/)                                │   │
-│  │ - Document Retrieval (Vector Search)                     │   │
-│  │ - Context Processing                                     │   │
-│  │ - LLM Orchestration                                      │   │
-│  │ - Response Generation                                    │   │
+│  │  RAG Pipeline Layer (app/)                                │   │
+│  │  - Hybrid retrieval (dense + BM25 + RRF + rerank)        │   │
+│  │  - Deterministic guards (greeting / weak grounding)      │   │
+│  │  - Single-call streamed LLM orchestration                │   │
+│  │  - Real token usage + cost tracking                      │   │
 │  └──────────┬───────────────────────────────────────────────┘   │
 │  ┌──────────▼───────────────────────────────────────────────┐   │
 │  │ Data Access Layer                                        │   │
@@ -58,7 +58,7 @@
     └───────┘         └──────────┘       └──────────┘
 ```
 
-## 📁 Directory Structure (Detailed)
+## Directory Structure (Detailed)
 
 ```
 document_intelligent_system/
@@ -75,19 +75,21 @@ document_intelligent_system/
 │   │   ├── __init__.py
 │   │   ├── main.py              # Application startup
 │   │   ├── database.py          # Database initialization
-│   │   ├── rag_graph.py         # ★ RAG Pipeline execution
-│   │   │                        #   - Retrieval step
-│   │   │                        #   - Processing step
-│   │   │                        #   - LLM generation step
-│   │   │                        #   - Step tracking
-│   │   ├── llm_helper.py        # ★ LLM API Integration
-│   │   │                        #   - OpenAI/Claude calls
-│   │   │                        #   - SSL certificate handling
-│   │   │                        #   - Error handling
-│   │   └── vector_store.py      # ★ Vector Database (Chroma)
-│   │                            #   - Semantic search
-│   │                            #   - Document indexing
-│   │                            #   - Similarity queries
+│  │  ├── rag_graph.py         # ★ RAG Pipeline execution
+│  │  │                        #   - Hybrid retrieval + rerank
+│  │  │                        #   - Greeting / grounding guards
+│  │  │                        #   - Single-call streamed generation
+│  │  │                        #   - Classic + stream entry points
+│  │  ├── llm_helper.py        # ★ LLM API Integration
+│  │  │                        #   - Groq/Gemini/OpenAI calls + SSE stream
+│  │  │                        #   - Real provider token usage capture
+│  │  │                        #   - Plain-text enforcement
+│  │  │                        #   - SSL certificate handling
+│  │  │                        #   - Error handling
+│  │  └── vector_store.py      # ★ Vector Database (Chroma)
+│  │                            #   - True cosine similarity
+│  │                            #   - Department collections
+│  │                            #   - Document indexing / deletion
 │   │
 │   ├── django_backend/          # Django Configuration
 │   │   ├── __init__.py
@@ -130,13 +132,13 @@ document_intelligent_system/
 │   │   │   │                    #   - index documents
 │   │   │   │                    #   - classify by department
 │   │   │   ├── documents.py     # Additional document ops
-│   │   │   ├── rag.py           # ★ Chat & RAG Endpoints
-│   │   │   │                    #   - GET /chat/sessions
-│   │   │   │                    #   - POST /chat/sessions
-│   │   │   │                    #   - PUT /chat/sessions/{id}
-│   │   │   │                    #   - DELETE /chat/sessions/{id}
-│   │   │   │                    #   - GET messages
-│   │   │   │                    #   - POST /chat/query
+│  │  │   ├── rag.py           # ★ Chat & RAG Endpoints
+│  │  │   │                    #   - GET /chat/sessions
+│  │  │   │                    #   - POST /chat/sessions
+│  │  │   │                    #   - DELETE /chat/sessions/{id}
+│  │  │   │                    #   - GET messages
+│  │  │   │                    #   - POST /chat/query (single call)
+│  │  │   │                    #   - POST /chat/query/stream (SSE)
 │   │   │   ├── rag_query.py     # Query-specific logic
 │   │   │   ├── admin.py         # Admin Operations
 │   │   │   │                    #   - delete documents
@@ -169,7 +171,7 @@ document_intelligent_system/
 │   │       └── uuid2/           # Document embeddings
 │   │
 │   ├── manage.py                # Django CLI
-│   ├── run.py                   # ★ Application Entry Point
+│   ├── run.py                   #  Application Entry Point
 │   ├── requirements.txt         # Python Dependencies
 │   ├── .env                     # Environment Variables (git-ignored)
 │   ├── .env.example             # Example environment template
@@ -180,7 +182,7 @@ document_intelligent_system/
 │   │
 │   ├── src/                     # Source Code
 │   │   ├── pages/               # Page Components
-│   │   │   ├── QueryPage.jsx    # ★ Main Chat Interface
+│   │   │   ├── QueryPage.jsx    #  Main Chat Interface
 │   │   │   │                    #   - Chat window
 │   │   │   │                    #   - Chat history sidebar
 │   │   │   │                    #   - Department filter
@@ -193,11 +195,11 @@ document_intelligent_system/
 │   │   │   └── ...
 │   │   │
 │   │   ├── components/          # Reusable Components
-│   │   │   ├── ChatWindow.jsx   # ★ Chat UI Component
+│   │   │   ├── ChatWindow.jsx   #  Chat UI Component
 │   │   │   │                    #   - Message display
 │   │   │   │                    #   - Input area
 │   │   │   │                    #   - Session selector
-│   │   │   ├── Visualizer.jsx   # ★ RAG Pipeline Visualizer
+│   │   │   ├── Visualizer.jsx   #  RAG Pipeline Visualizer
 │   │   │   │                    #   - Step visualization
 │   │   │   │                    #   - Source highlighting
 │   │   │   │                    #   - Step tracking
@@ -244,85 +246,81 @@ document_intelligent_system/
 │
 └── .venv/                       # Root Python Virtual Environment
 
-★ = Core/Important files
+ ★ = Core/Important files
 ```
 
-## 🔄 Data Flow
+## Data Flow
 
-### Chat Query Flow
+### Chat Query Flow (streamed, single LLM call)
 
 ```
-User Input (QueryPage)
+User Input (QueryPage, thread URL /query/:sessionId)
     ↓
-ChatWindow Component
+ChatWindow Component (paged visible stream-out)
     ↓
 handleSendMessage() in QueryPage
     ↓
-POST /api/chat/query (REST API)
+POST /api/chat/query/stream (SSE: token / citations / done)
     ↓
-Django Backend (rag.py view)
+Django Backend (rag.py query_rag_stream view)
     ↓
-Permission Check (IsViewerOrAbove)
+Permission Check (IsViewerOrAbove) + department scoping
     ↓
-run_rag_pipeline() [app/rag_graph.py]
+run_rag_stream() [app/rag_graph.py]
+    ├─ greeting guard → instant fixed reply (zero LLM)
+    ├─ semantic cache lookup (Redis + RediSearch, RBAC-scoped)
+    │  └─ hit → instant answer, zero LLM
     ├─ retrieval step
-    │  └─ Vector Store Search (Chroma)
-    ├─ processing step
-    │  └─ Context Formatting
-    ├─ llm_generation step
-    │  └─ LLM API Call (llm_helper.py)
-    └─ formatting step
-       └─ Response Formatting
+    │  └─ Hybrid search: dense + BM25 + RRF fusion
+    ├─ rerank + token-budget context build
+    ├─ weak-grounding guard (<20% top cosine → local refusal)
+    ├─ llm_generation step (ONE streamed call, ≤5 points)
+    │  └─ Real billed tokens captured from provider usage
+    └─ persist message + tokens + cost + cache flag
     ↓
-Return Response with steps & sources
+Frontend appends tokens live, stages light up progressively
     ↓
-Frontend Updates State
-    ├─ Set messages
-    ├─ Set execution steps (for visualizer)
-    └─ Display response
+Visualizer renders steps + real cost/latency/cache panel
     ↓
-Visualizer Component renders steps
-    ↓
-User sees response + pipeline visualization
+User sees pointed answer + cited-only sources
 ```
 
-### Document Upload Flow
+### Document Upload Flow (single or batch up to 1000 files)
 
 ```
-User selects file (DocumentsPage)
+User selects file(s) (DocumentsPage, multi-select)
     ↓
-Upload form submission
-    ↓
-POST /api/documents/upload (REST API)
+POST /api/documents/upload[/batch] (REST API)
     ↓
 Django Backend (doc_api.py)
     ↓
 Permission Check (IsEditorOrAbove)
     ↓
-Save file to uploads/
+Save file(s) to uploads/ + create DB rows
     ↓
-doc_indexing.py processes document
-    ├─ Extract text
-    ├─ Split into chunks
-    ├─ Generate embeddings
-    └─ Classify by department
+Version + content checks per file (zero LLM)
+    ├─ Same filename in dept → previous version superseded
+    │  (status retired, chunks deleted, caches invalidated)
+    ├─ Byte-identical content → skipped as duplicate
+    └─ Near-duplicate (>=85% text) → old doc superseded
     ↓
-Store in vector_store.py (Chroma)
+2-worker pool runs doc_indexing.py per document
+    ├─ Extract text + split into chunks
+    ├─ Generate embeddings (serialized lock) + LLM classification (parallel)
+    └─ Race guard: superseded docs stay retired
+    ↓
+Store in vector_store.py (department Chroma collection)
     ↓
 Save document metadata to SQLite
     ↓
-Return success response
-    ↓
-Frontend updates document list
-    ↓
-User sees document in list
+Frontend updates document list (status: ingesting → indexed)
 ```
 
 ### Session Management CRUD Flow
 
 ```
 Create Session
-    ├─ User clicks "➕ New Chat"
+    ├─ User clicks " New Chat"
     ├─ handleCreateSession() prompts for name
     ├─ POST /api/chat/sessions
     ├─ Backend creates ChatSession object
@@ -335,7 +333,7 @@ Read Sessions
     └─ Frontend displays in sidebar
 
 Update Session (Rename)
-    ├─ User clicks 3-dot menu → "✏️ Rename"
+    ├─ User clicks 3-dot menu → " Rename"
     ├─ Inline edit form appears
     ├─ handleEditSessionSave()
     ├─ PUT /api/chat/sessions/{id}
@@ -343,7 +341,7 @@ Update Session (Rename)
     └─ Frontend updates UI
 
 Delete Session
-    ├─ User clicks 3-dot menu → "🗑️ Delete"
+    ├─ User clicks 3-dot menu → " Delete"
     ├─ Confirmation dialog
     ├─ handleDeleteSession()
     ├─ DELETE /api/chat/sessions/{id}
@@ -351,7 +349,7 @@ Delete Session
     └─ Frontend removes from list
 ```
 
-## 🔐 Authentication & Authorization Flow
+## Authentication & Authorization Flow
 
 ```
 Login Page
@@ -381,7 +379,7 @@ Permission class checks role
 Request proceeds or returns 403 Forbidden
 ```
 
-## 📊 Database Schema Overview
+## Database Schema Overview
 
 ```
 User Table
@@ -418,6 +416,9 @@ ChatMessage Table
 ├─ content
 ├─ steps (JSON) [for RAG tracking]
 ├─ sources (JSON) [cited documents]
+├─ input_tokens / output_tokens (provider-reported, 0 = local reply)
+├─ estimated_cost_usd (pricing x real tokens)
+├─ latency_ms, cache_hit, model_used
 └─ created_at
 
 LLMConfig Table
@@ -430,7 +431,7 @@ LLMConfig Table
 └─ created_at
 ```
 
-## 🔌 API Structure
+## API Structure
 
 ```
 REST Endpoints:
@@ -447,23 +448,25 @@ REST Endpoints:
 ├─ PUT    sessions/{id}  # Update session
 ├─ DELETE sessions/{id}  # Delete session
 ├─ GET    sessions/{id}/messages
-└─ POST   query          # Send chat query
+├─ POST   query          # Send chat query (single LLM call)
+└─ POST   query/stream   # Streamed query (SSE token/citations/done)
 
 /api/documents/
 ├─ GET    .              # List documents
-├─ POST   upload         # Upload document
-├─ GET    {id}           # Get document
-├─ DELETE {id}           # Delete document
-└─ GET    search         # Search documents
+├─ POST   upload         # Upload document (versioning + dedupe)
+├─ POST   upload/batch   # Upload up to 1000 files
+├─ GET    {id}/file      # Preview/download original (dept-scoped)
+└─ DELETE {id}           # Delete document
 
 /api/admin/
-├─ GET    metrics        # System metrics
+├─ GET    metrics        # Real tokens, cost, cache hits, latency, errors
 ├─ DELETE documents/{id} # Force delete
 ├─ GET    users          # Manage users
+├─ PATCH/DELETE users/{id} # Update or delete user (self/last-admin guarded)
 └─ POST   llm/config     # Configure LLM
 ```
 
-## 🎯 Key Design Patterns
+## Key Design Patterns
 
 ### 1. MVC Pattern (Backend)
 - **Models**: Django ORM models (models.py)
@@ -485,19 +488,19 @@ REST Endpoints:
 - Permission classes in views
 - Serializer-level filtering
 
-## 🔄 State Management
+## State Management
 
 ### Backend State
 - SQLite database (persistent)
+- Redis + RediSearch (semantic/embedding/retrieval/rerank/prompt caches)
 - Session variables (request scope)
-- Cached data (optional Redis)
 
 ### Frontend State
 - React hooks (useState)
 - localStorage (persistence)
 - sessionStorage (temporary)
 
-## 📈 Scalability Considerations
+## Scalability Considerations
 
 ### Horizontal Scaling
 - Stateless backend (can run multiple instances)

@@ -1,10 +1,29 @@
-# 📚 Documentation Summary
+# Documentation Summary
 
 This document provides an overview of all documentation files in the project.
 
 ---
 
-## 📖 Documentation Files Created
+## Shipped Behavior (v2.0, September 2026)
+
+The code no longer matches older design notes that describe multi-call LLM
+grading loops. Current behavior, also reflected in README.md, HLD.md,
+PROJECT_STRUCTURE.md, and QUICKSTART.md:
+
+- Single LLM call per query, streamed over SSE (`POST /api/chat/query/stream`)
+- Short plain-text answers (max 5 numbered points), real provider token usage
+- True cosine similarity (empirically verified distance metric)
+- Deterministic guards: greeting short-circuit, weak-grounding refusal (<20%)
+- Redis + RediSearch semantic cache (repeat queries return in milliseconds)
+- Versioned ingestion: same-name supersede, duplicate skip, near-dup supersede
+- Live admin metrics from the message ledger (tokens, cost, cache hits, latency)
+
+Where older review docs under `docs/review1/` still describe planned work
+(streaming, batch upload), that work is now shipped.
+
+---
+
+## Documentation Files Created
 
 ### 1. **README.md** (Root)
    - **Purpose**: Main project documentation
@@ -99,7 +118,7 @@ This document provides an overview of all documentation files in the project.
 
 ---
 
-## 🗂️ Directory Structure Overview
+## Directory Structure Overview
 
 ```
 document_intelligent_system/
@@ -131,7 +150,7 @@ document_intelligent_system/
 
 ---
 
-## 🔍 How to Use This Documentation
+## How to Use This Documentation
 
 ### For New Developers:
 1. Start with **README.md** for project overview
@@ -160,67 +179,67 @@ document_intelligent_system/
 
 ---
 
-## 📋 What Each File Covers
+## What Each File Covers
 
 ### README.md Features:
-- ✅ Project vision and features
-- ✅ Tech stack
-- ✅ Installation steps
-- ✅ Project structure overview
-- ✅ API documentation links
-- ✅ Contributing guidelines
-- ✅ License information
+- Project vision and features
+- Tech stack
+- Installation steps
+- Project structure overview
+- API documentation links
+- Contributing guidelines
+- License information
 
 ### QUICKSTART.md Features:
-- ✅ 5-minute setup
-- ✅ Environment variables
-- ✅ First steps
-- ✅ Troubleshooting
-- ✅ Common tasks
-- ✅ Next steps
+- 5-minute setup
+- Environment variables
+- First steps
+- Troubleshooting
+- Common tasks
+- Next steps
 
 ### HLD.md Features:
-- ✅ Architecture diagrams
-- ✅ Data flow diagrams
-- ✅ User role hierarchy
-- ✅ Security architecture
-- ✅ Data models overview
-- ✅ Module interactions
-- ✅ Frontend architecture
-- ✅ Integration points
-- ✅ Scalability strategy
-- ✅ Monitoring setup
+- Architecture diagrams
+- Data flow diagrams
+- User role hierarchy
+- Security architecture
+- Data models overview
+- Module interactions
+- Frontend architecture
+- Integration points
+- Scalability strategy
+- Monitoring setup
 
 ### LLD.md Features:
-- ✅ Project structure details
-- ✅ Complete Django models
-- ✅ All REST API endpoints
-- ✅ RAG pipeline code
-- ✅ Algorithms and complexity
-- ✅ React component hierarchy
-- ✅ State management
-- ✅ Security implementation
-- ✅ Database schema
-- ✅ Performance optimization
-- ✅ Testing strategy
-- ✅ Deployment checklist
+- Project structure details
+- Complete Django models
+- All REST API endpoints
+- RAG pipeline code
+- Algorithms and complexity
+- React component hierarchy
+- State management
+- Security implementation
+- Database schema
+- Performance optimization
+- Testing strategy
+- Deployment checklist
 
 ### PROJECT_STRUCTURE.md Features:
-- ✅ Complete directory tree
-- ✅ Module descriptions
-- ✅ Key files
-- ✅ Database schema overview
+- Complete directory tree
+- Module descriptions
+- Key files
+- Database schema overview
 
 ### CONTRIBUTING.md Features:
-- ✅ Code style guide
-- ✅ Git workflow
-- ✅ Pull request process
-- ✅ Testing requirements
-- ✅ Issue templates
+- Code style guide
+- Git workflow
+- Pull request process
+- Testing requirements
+- Issue templates
 
 ---
 
-## 🎯 Key Documentation Sections
+## Key Documentation Sections
 
 ### System Architecture
 - **Location**: HLD.md
@@ -249,7 +268,7 @@ document_intelligent_system/
 
 ---
 
-## 🔗 Cross-References
+## Cross-References
 
 ### Backend Developers Should Read:
 - README.md (overview)
@@ -284,7 +303,7 @@ document_intelligent_system/
 
 ---
 
-## 📊 Documentation Statistics
+## Documentation Statistics
 
 | File | Lines | Focus | Audience |
 |------|-------|-------|----------|
@@ -300,7 +319,7 @@ document_intelligent_system/
 
 ---
 
-## 🚀 Getting Started with Documentation
+## Getting Started with Documentation
 
 ### Step 1: Initial Setup
 ```bash
@@ -337,7 +356,7 @@ cat CONTRIBUTING.md
 
 ---
 
-## 💡 Tips for Using Documentation
+## Tips for Using Documentation
 
 1. **Use Ctrl+F (Cmd+F)** to search for specific terms
 2. **Start with TOC**: Most docs have table of contents
@@ -348,7 +367,7 @@ cat CONTRIBUTING.md
 
 ---
 
-## 📝 How to Update Documentation
+## How to Update Documentation
 
 When you make code changes:
 
@@ -361,7 +380,7 @@ When you make code changes:
 
 ---
 
-## 🔄 Documentation Maintenance
+## Documentation Maintenance
 
 **Review Schedule**:
 - HLD.md: Quarterly (major architecture changes)
@@ -373,7 +392,7 @@ When you make code changes:
 
 ---
 
-## ❓ FAQ
+## FAQ
 
 **Q: Which file should I read first?**
 A: Start with README.md, then QUICKSTART.md
@@ -395,7 +414,7 @@ A: Follow QUICKSTART.md step by step
 
 ---
 
-## 🎓 Learning Path
+## Learning Path
 
 ```
 Beginner:

@@ -2,7 +2,7 @@
 
 A full-stack document intelligence platform that leverages **RAG (Retrieval-Augmented Generation)** to provide smart, context-aware document analysis and querying. Built with Django REST Framework backend, React/Vite frontend, and advanced NLP capabilities.
 
-## 🎯 Overview
+## Overview
 
 The Document Intelligent System is designed to help organizations:
 - Upload and index documents with semantic understanding
@@ -12,7 +12,7 @@ The Document Intelligent System is designed to help organizations:
 - Control access through role-based permissions
 - Filter results by department
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 document_intelligent_system/
@@ -69,25 +69,25 @@ document_intelligent_system/
 └── .venv/                     # Python virtual environment
 ```
 
-## 🚀 Features
+## Features
 
 ### Core Features
-- **📄 Document Management**: Upload (single or batch up to 1000 files), index, preview, and organize documents by department
-- **🔍 Semantic Search**: Hybrid RAG (dense vectors + BM25 + RRF fusion + cross-encoder rerank) with true cosine similarity scores
-- **💬 Chat Interface**: Real-time token streaming (SSE) with paced visible stream-out, message history, and deep-linkable threads (`/query/:sessionId`)
-- **⚡ Fast Single-Call Pipeline**: 1 LLM call per query (no grading loops); semantic + prompt + embedding caches (Redis + RediSearch)
-- **🛡️ Deterministic Guards**: Greeting short-circuit, weak-grounding refusal (no LLM, no citations), cited-only source display, weak-grounding amber flag
-- **📊 RAG Pipeline Visualization**: Live stage tracing (retrieve → grade → generate) with real tokens, billed cost, latency, and cache status per answer
-- **📤 Answer Export**: Copy / download (.txt / .md) question + answer, native Share support
-- **🔄 Document Versioning**: Same-name re-upload supersedes v1 (chunks deleted, caches invalidated); byte-identical uploads skipped as duplicates; near-duplicate (≥85%) content supersedes by similarity
-- **🏢 Department Filtering**: Query documents from specific departments
-- **👤 Role-Based Access Control**: Admin, Editor, Viewer roles with granular permissions
+- ** Document Management**: Upload (single or batch up to 1000 files), index, preview, and organize documents by department
+- ** Semantic Search**: Hybrid RAG (dense vectors + BM25 + RRF fusion + cross-encoder rerank) with true cosine similarity scores
+- ** Chat Interface**: Real-time token streaming (SSE) with paced visible stream-out, message history, and deep-linkable threads (`/query/:sessionId`)
+- ** Fast Single-Call Pipeline**: 1 LLM call per query (no grading loops); semantic + prompt + embedding caches (Redis + RediSearch)
+- ** Deterministic Guards**: Greeting short-circuit, weak-grounding refusal (no LLM, no citations), cited-only source display, weak-grounding amber flag
+- ** RAG Pipeline Visualization**: Live stage tracing (retrieve → grade → generate) with real tokens, billed cost, latency, and cache status per answer
+- ** Answer Export**: Copy / download (.txt / .md) question + answer, native Share support
+- ** Document Versioning**: Same-name re-upload supersedes v1 (chunks deleted, caches invalidated); byte-identical uploads skipped as duplicates; near-duplicate (≥85%) content supersedes by similarity
+- ** Department Filtering**: Query documents from specific departments
+- ** Role-Based Access Control**: Admin, Editor, Viewer roles with granular permissions
 
 ### Chat Session Management (CRUD)
-- ✨ **Create** new chat threads
-- 📖 **Read** chat history with full conversation context
-- ✏️ **Update** (rename) chat sessions via 3-dot menu
-- 🗑️ **Delete** chat sessions with confirmation
+- **Create** new chat threads
+- **Read** chat history with full conversation context
+- **Update** (rename) chat sessions via 3-dot menu
+- **Delete** chat sessions with confirmation
 
 ### Backend Features
 - **REST API** with Django REST Framework
@@ -106,7 +106,7 @@ document_intelligent_system/
 - LLM configuration management
 - System metrics and analytics (real tokens, cost, cache hits, latency, errors)
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 ### Backend
 - **Framework**: Django 4.x + Django REST Framework
@@ -124,14 +124,14 @@ document_intelligent_system/
 - **HTTP Client**: Fetch API
 - **Language**: JavaScript (ES6+)
 
-## 📋 Prerequisites
+## Prerequisites
 
 - Python 3.10+ (backend)
 - Node.js 16+ (frontend)
 - npm or yarn (frontend)
 - Git (for version control)
 
-## ⚙️ Installation & Setup
+## Installation & Setup
 
 ### Backend Setup
 
@@ -195,7 +195,7 @@ document_intelligent_system/
    ```
    Application will be available at `http://localhost:5173`
 
-## 🔌 API Endpoints
+## API Endpoints
 
 ### Authentication
 - `POST /api/auth/login` - User login
@@ -225,7 +225,7 @@ document_intelligent_system/
 - `DELETE /api/admin/documents/{id}` - Admin document deletion
 - `DELETE /api/admin/users/{id}` - Delete user with confirmation (self-delete and last-admin protected)
 
-## 🔐 Authentication
+## Authentication
 
 The system uses **JWT (JSON Web Token)** authentication:
 
@@ -235,7 +235,7 @@ The system uses **JWT (JSON Web Token)** authentication:
 4. All API requests include: `Authorization: Bearer {token}`
 5. Token can be refreshed before expiration
 
-## 🎯 Usage Examples
+## Usage Examples
 
 ### Upload a Document
 ```bash
@@ -265,7 +265,7 @@ curl -X POST http://localhost:8000/api/chat/sessions \
   -d '{"name": "Project Discussion"}'
 ```
 
-## 📊 RAG Pipeline Execution
+## RAG Pipeline Execution
 
 The system shows a visual representation of the RAG pipeline:
 
@@ -277,7 +277,7 @@ The system shows a visual representation of the RAG pipeline:
 
 Each step is traced live in the Execution Pipeline panel with real tokens, cost, latency, and cache status.
 
-## ⚙️ Tuning Flags (env vars)
+## Tuning Flags (env vars)
 
 - `INTRADOC_FAST_PATH=1` - Single-call pipeline (0 = legacy grade/regenerate pipeline)
 - `INTRADOC_PLAIN_TEXT=1` - Plain-text answers, no markdown artefacts
@@ -288,7 +288,7 @@ Each step is traced live in the Execution Pipeline panel with real tokens, cost,
 - `INTRADOC_DUP_SIM_THRESHOLD=0.85` - Near-duplicate supersede threshold
 - `INTRADOC_REDIS_URL` - Redis endpoint (must load the RediSearch module; `./start_redis.sh` handles it)
 
-## 🔒 Security Features
+## Security Features
 
 - **JWT Authentication**: Secure token-based auth
 - **Role-Based Access Control (RBAC)**: Admin/Editor/Viewer roles
@@ -298,7 +298,7 @@ Each step is traced live in the Execution Pipeline panel with real tokens, cost,
 - **SQL Injection Protection**: ORM-based queries prevent SQL injection
 - **Permission Classes**: Custom DRF permission classes
 
-## 🧪 Testing
+## Testing
 
 ### Backend Tests
 ```bash
@@ -312,7 +312,7 @@ cd frontend
 npm test
 ```
 
-## 📦 Deployment
+## Deployment
 
 ### Backend Deployment (Gunicorn + Nginx)
 ```bash
@@ -325,7 +325,7 @@ npm run build
 # Output in dist/ directory
 ```
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### Backend Issues
 - **Import errors**: Ensure virtual environment is activated and requirements.txt is installed
@@ -337,13 +337,13 @@ npm run build
 - **Token errors**: Clear localStorage and re-login
 - **API 404**: Ensure backend is running on correct port
 
-## 📚 Documentation
+## Documentation
 
 - [Backend README](./backend/README.md) - Backend-specific documentation
 - [Frontend README](./frontend/README.md) - Frontend-specific documentation
 - [API Documentation](./API.md) - Detailed API reference
 
-## 🤝 Contributing
+## Contributing
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
@@ -351,29 +351,29 @@ npm run build
 4. Push to branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
-## 📄 License
+## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
 
-## 👥 Team
+## Team
 
 - **Backend Engineer**: RAG Pipeline & API Development
 - **Frontend Engineer**: UI/UX & Chat Interface
 - **DevOps**: Deployment & Infrastructure
 
-## 📞 Support
+## Support
 
 For issues, questions, or suggestions:
 - Open an Issue on GitHub
 - Check existing documentation
 - Review the troubleshooting section
 
-## 🎉 Acknowledgments
+## Acknowledgments
 
 - Django REST Framework for excellent REST API framework
 - Chroma for vector database capabilities
 - React & Vite for modern web development
-- OpenAI/Anthropic for LLM capabilities
+- Groq for LLM inference
 
 ---
 
